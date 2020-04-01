@@ -1,0 +1,44 @@
+{
+    "name": "foo",
+    "nodes": [
+        {
+            "name": "A",
+            "image": "poseidon/worker/dummy:latest",
+            "input": "@args"
+        },
+        {
+            "name": "B",
+            "image": "poseidon/worker/dummy:latest",
+            "input": "#A",
+            "dependencies": ["A"]
+        },
+        {
+            "name": "C",
+            "image": "poseidon/worker/dummy:latest",
+            "input": {
+                "delay": "10s",
+                "payload": "DONE"
+            },
+            "dependencies": ["B"]
+        }
+    ],
+    "args": {
+        "delay": "5s",
+        "parallelism": 2,
+        "payload": [
+            {
+                "delay": "10s",
+                "payload": "YOUHOU1"
+            },
+            {
+                "delay": "5s",
+                "payload": "YOUHOU2",
+                "error": true
+            },
+            {
+                "delay": "8s",
+                "payload": "YOUHOU3"
+            }
+        ]
+    }
+}

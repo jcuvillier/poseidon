@@ -1,0 +1,23 @@
+{
+    "name": "foo",
+    "nodes": [
+        {
+            "name": "A",
+            "image": "poseidon/worker/dummy:latest",
+            "input": "@args"
+        },
+        {
+            "name": "B",
+            "image": "poseidon/worker/dummy:latest",
+            "input": "@A",
+            "dependencies": ["A"]
+        }
+    ],
+    "args": {
+        "delay": "20s",
+        "payload": {
+            "delay": "10s",
+            "payload": "YOUHOU"
+        }
+    }
+}

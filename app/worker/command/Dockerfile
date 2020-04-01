@@ -1,0 +1,11 @@
+FROM golang:1.14-buster AS build-env
+
+ADD . /src
+RUN cd /src && CGO_ENABLED=0 go build -o worker poseidon/app/worker/command
+
+FROM busybox
+
+COPY --from=build-env /src/worker /app/
+COPY --from=build-env /etc/ssl/certs /etc/ssl/certs
+
+CMD ["/app/worker"]
