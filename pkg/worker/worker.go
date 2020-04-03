@@ -7,6 +7,7 @@ import (
 	"poseidon/pkg/broker"
 	"poseidon/pkg/context"
 	"poseidon/pkg/events"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -118,6 +119,7 @@ func newEvent(ctx context.Context, typ events.EventType, payload interface{}) ev
 		NodeName:      ctx.NodeName(),
 		ProcessID:     ctx.ProcessID(),
 		Data:          payload,
+		Time:          time.Now(),
 	}
 }
 

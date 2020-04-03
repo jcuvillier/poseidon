@@ -26,25 +26,8 @@ func NewGetCommand() *cobra.Command {
 			if err != nil {
 				log.Fatal(err)
 			}
-			common.PrintPipeline(os.Stdout, api.PipelineState(state), common.PrintOptions{})
+			common.PrintPipeline(os.Stdout, api.PipelineState(state), args[0], common.PrintOptions{})
 		},
 	}
 	return command
-}
-
-var getCmd = &cobra.Command{
-	Use:  "get",
-	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		cli, err := client.New()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		state, err := cli.PipelineState(context.Background(), args[0])
-		if err != nil {
-			log.Fatal(err)
-		}
-		common.PrintPipeline(os.Stdout, api.PipelineState(state), common.PrintOptions{})
-	},
 }

@@ -31,9 +31,6 @@ type Pipeline interface {
 	// NodeFinished is the function called when a node is finished. (Success or failure)
 	NodeFinished(ctx context.Context, nodename string, status api.Status) error
 
-	// State return the pipeline state.
-	State(ctx context.Context) (api.PipelineState, error)
-
 	// Set function to be called when a pipeline is submitted.
 	SetSetupFunc(SetupFunc)
 
@@ -207,10 +204,6 @@ func (p *pipelineEngine) Terminate(ctx context.Context, reason string) error {
 func (p *pipelineEngine) Cancel(ctx context.Context, gracefully bool) error {
 	ctx.Logger().Infof("cancelling process %s", ctx.ProcessID())
 	return p.stop(ctx, api.StatusCancelled, gracefully)
-}
-
-func (p *pipelineEngine) State(ctx context.Context) (api.PipelineState, error) {
-	return api.PipelineState{}, nil
 }
 
 func (p *pipelineEngine) SetSetupFunc(f SetupFunc) {

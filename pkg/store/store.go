@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"poseidon/pkg/api"
+	"time"
 )
 
 // Store interface defines access to the store backend
@@ -35,7 +36,7 @@ type ExecutorStore interface {
 	GetJobsStatuses(ctx context.Context, pid, nodename string) (map[string]api.Status, error)
 	// SetNodeRunning sets the node status to running  if not already in running or a finished status.
 	SetNodeRunning(ctx context.Context, pid, nodename string) error
-	SetJobStatus(ctx context.Context, pid, nodename, jobID string, status api.Status, payload interface{}) error
+	SetJobStatus(ctx context.Context, pid, nodename, jobID string, status api.Status, t time.Time, payload interface{}) error
 	GetJobStatus(ctx context.Context, pid, nodename, jobID string) (api.Status, error)
 	StopJobs(ctx context.Context, pid, nodename string, status api.Status) error
 

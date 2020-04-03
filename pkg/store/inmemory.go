@@ -5,21 +5,27 @@ import (
 	"fmt"
 	"poseidon/pkg/api"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 )
 
 type pipeline struct {
-	spec   api.PipelineSpec
-	status api.Status
-	args   interface{}
-	nodes  map[string]*node
+	spec       api.PipelineSpec
+	status     api.Status
+	args       interface{}
+	nodes      map[string]*node
+	createTime *time.Time
+	startTime  *time.Time
+	endTime    *time.Time
 }
 
 type node struct {
-	name   string
-	status api.Status
-	jobs   map[string]*job
+	name      string
+	status    api.Status
+	jobs      map[string]*job
+	startTime *time.Time
+	endTime   *time.Time
 }
 
 type job struct {
@@ -30,6 +36,8 @@ type job struct {
 	status      api.Status
 	executionID string
 	result      interface{}
+	startTime   *time.Time
+	endTime     *time.Time
 }
 
 // NewInMemoryStore returns a new InMemory store
@@ -44,11 +52,13 @@ type inMemory struct {
 }
 
 func (s *inMemory) CreatePipeline(ctx context.Context, pid string, spec api.PipelineSpec, args interface{}) error {
+	now := time.Now()
 	p := pipeline{
-		spec:   spec,
-		status: api.StatusCreated,
-		args:   args,
-		nodes:  make(map[string]*node),
+		spec:       spec,
+		status:     api.StatusCreated,
+		args:       args,
+		nodes:      make(map[string]*node),
+		createTime: &now,
 	}
 	s.pipelines[pid] = &p
 	return nil
@@ -93,6 +103,12 @@ func (s *inMemory) SetPipelineStatus(ctx context.Context, pid string, status api
 	p := s.pipelines[pid]
 	p.status = status
 	s.pipelines[pid] = p
+	now := time.Now()
+	if status.Finished() {
+		p.endTime = &now
+	} else if status == api.StatusRunning {
+		p.startTime = &now
+	}
 	return nil
 }
 
@@ -223,6 +239,12 @@ func (s *inMemory) SetNodeStatus(ctx context.Context, pid, nodename string, stat
 		return NotFoundError(fmt.Sprintf("node %s", nodename))
 	}
 	node.status = status
+	now := time.Now()
+	if status == api.StatusSubmitted {
+		node.startTime = &now
+	} else if status.Finished() {
+		node.endTime = &now
+	}
 	return nil
 }
 
@@ -242,7 +264,7 @@ func (s *inMemory) GetJobStatus(ctx context.Context, pid, nodename, jobID string
 	return job.status, nil
 }
 
-func (s *inMemory) SetJobStatus(ctx context.Context, pid, nodename, jobID string, status api.Status, payload interface{}) error {
+func (s *inMemory) SetJobStatus(ctx context.Context, pid, nodename, jobID string, status api.Status, t time.Time, payload interface{}) error {
 	p, exists := s.pipelines[pid]
 	if !exists {
 		return NotFoundError(fmt.Sprintf("process %s", pid))
@@ -257,6 +279,12 @@ func (s *inMemory) SetJobStatus(ctx context.Context, pid, nodename, jobID string
 	}
 	job.status = status
 	job.result = payload
+
+	if status.Finished() {
+		job.endTime = &t
+	} else if status == api.StatusRunning {
+		job.startTime = &t
+	}
 	return nil
 }
 
@@ -276,14 +304,19 @@ func (s *inMemory) PipelineState(ctx context.Context, pid string) (api.PipelineS
 	var nodes []api.NodeState
 	for _, v := range p.nodes {
 		nodes = append(nodes, api.NodeState{
-			Name:   v.name,
-			Status: v.status,
+			Name:      v.name,
+			Status:    v.status,
+			StartTime: v.startTime,
+			EndTime:   v.endTime,
 		})
 	}
 	return api.PipelineState{
-		Name:   p.spec.Name,
-		Status: p.status,
-		Nodes:  nodes,
+		Name:       p.spec.Name,
+		Status:     p.status,
+		Nodes:      nodes,
+		CreateTime: p.createTime,
+		StartTime:  p.startTime,
+		EndTime:    p.endTime,
 	}, nil
 }
 
@@ -299,14 +332,18 @@ func (s *inMemory) NodeState(ctx context.Context, pid, nodename string) (api.Nod
 	var jobs []api.JobState
 	for _, v := range node.jobs {
 		jobs = append(jobs, api.JobState{
-			ID:     v.jobID,
-			Status: v.status,
+			ID:        v.jobID,
+			Status:    v.status,
+			StartTime: v.startTime,
+			EndTime:   v.endTime,
 		})
 	}
 	return api.NodeState{
-		Name:   node.name,
-		Status: node.status,
-		Jobs:   jobs,
+		Name:      node.name,
+		Status:    node.status,
+		Jobs:      jobs,
+		StartTime: node.startTime,
+		EndTime:   node.endTime,
 	}, nil
 }
 
@@ -325,8 +362,10 @@ func (s *inMemory) JobState(ctx context.Context, pid, nodename, jobID string) (a
 		return api.JobState{}, NotFoundError(fmt.Sprintf("job %s", jobID))
 	}
 	return api.JobState{
-		ID:     job.jobID,
-		Status: job.status,
+		ID:        job.jobID,
+		Status:    job.status,
+		StartTime: job.startTime,
+		EndTime:   job.endTime,
 	}, nil
 }
 
