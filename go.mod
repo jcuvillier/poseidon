@@ -25,6 +25,7 @@ require (
 	github.com/spf13/cobra v0.0.7
 	github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71
 	github.com/stretchr/objx v0.1.1 // indirect
+	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasttemplate v1.1.0 // indirect
 	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59 // indirect
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e

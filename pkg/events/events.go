@@ -1,6 +1,9 @@
 package events
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // EventType type of event
 type EventType string
@@ -21,6 +24,7 @@ type Event struct {
 	CorrelationID string
 	ExecutionID   string
 	Data          interface{}
+	Time          time.Time
 }
 
 func (e Event) String() string {

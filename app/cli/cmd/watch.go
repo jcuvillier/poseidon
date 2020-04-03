@@ -39,7 +39,7 @@ func watch(ctx context.Context, pid string) error {
 			return errors.Wrapf(err, "cannot get state of pipeline with processID %s", pid)
 		}
 		tm.MoveCursor(1, 1)
-		common.PrintPipeline(tm.Screen, api.PipelineState(state), common.PrintOptions{})
+		common.PrintPipeline(tm.Screen, api.PipelineState(state), pid, common.PrintOptions{})
 		tm.Flush()
 		if state.Status.Finished() {
 			break

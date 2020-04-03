@@ -132,7 +132,7 @@ func (e *exec) HandleEvent(ctx context.Context, evt events.Event) error {
 		return nil
 	}
 
-	if err := e.s.SetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID, status, payload); err != nil {
+	if err := e.s.SetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID, status, evt.Time, payload); err != nil {
 		return errors.Wrapf(err, "cannot set status %s for job %s of node %s", status, evt.JobID, evt.NodeName)
 	}
 	if status == api.StatusRunning {
