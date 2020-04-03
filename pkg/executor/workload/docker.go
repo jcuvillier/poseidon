@@ -6,6 +6,8 @@ import (
 	"poseidon/pkg/context"
 	"poseidon/pkg/worker"
 
+	"github.com/docker/docker/api/types/filters"
+
 	"github.com/pkg/errors"
 
 	"github.com/docker/docker/api/types"
@@ -63,6 +65,25 @@ func (d docker) Schedule(ctx context.Context, spec api.NodeSpec, env map[string]
 }
 
 func (d docker) Delete(ctx context.Context, nodename string) error {
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", fmt.Sprintf("%s=%s", api.HeaderProcessID, ctx.ProcessID()))
+	filterArgs.Add("label", fmt.Sprintf("%s=%s", api.HeaderNodename, nodename))
+	containers, err := d.cli.ContainerList(ctx, types.ContainerListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return errors.Wrapf(err, "cannot list containers for node %s", nodename)
+	}
+	for _, c := range containers {
+		ctx.Logger().Tracef("removing container %s (%s)", c.ID, c.Names[0])
+		if err := d.cli.ContainerRemove(ctx, c.ID, types.ContainerRemoveOptions{
+			Force: true,
+		}); err != nil {
+			return errors.Wrapf(err, "cannot remove container %s", c.ID)
+		}
+	}
+
 	return nil
 }
 
