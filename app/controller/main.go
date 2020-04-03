@@ -46,6 +46,7 @@ func main() {
 	e.Add(client.SubmitMethod, client.SubmitPath, h.Submit)
 	e.GET("/pipelines", h.ListPipelines)
 	e.Add(client.PipelineStateMethod, client.PipelineStatePath, h.PipelineState)
+	e.Add(client.NodeStateMethod, client.NodeStatePath, h.NodeState)
 	e.GET(fmt.Sprintf("/pipelines/:%s/nodes/:%s/state", processIDParam, nodenameParam), h.NodeState)
 	e.GET(fmt.Sprintf("/pipelines/:%s/nodes/:%s/result", processIDParam, nodenameParam), h.NodeResult)
 	e.GET(fmt.Sprintf("/pipelines/:%s/nodes/:%s/jobs/:%s/result", processIDParam, nodenameParam, jobIDParam), h.JobResult)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"poseidon/pkg/client"
 	"poseidon/pkg/context"
 	"poseidon/pkg/store"
 
@@ -9,17 +10,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (h handlers) PipelineState(c echo.Context) error {
+func (h handlers) NodeState(c echo.Context) error {
 	ctx := context.FromContext(c.Request().Context())
-
-	pid := c.Param(processIDParam)
-	ps, err := h.p.PipelineState(ctx, pid)
+	pid := c.Param(client.ProcessIDParam)
+	nodename := c.Param(client.NodenameParam)
+	state, err := h.p.Executor().NodeState(ctx, pid, nodename)
 	if err != nil {
 		if errors.As(errors.Cause(err), &store.ErrNotFound{}) {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-
-	return c.JSON(http.StatusOK, ps)
+	return c.JSON(http.StatusOK, state)
 }
