@@ -5,7 +5,6 @@ import (
 	"log"
 	"poseidon/app/cli/cmd/client"
 	"poseidon/app/cli/cmd/common"
-	"poseidon/pkg/api"
 	"time"
 
 	tm "github.com/buger/goterm"
@@ -32,14 +31,14 @@ func watch(ctx context.Context, pid string) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot create poseidon client")
 	}
-	tm.Clear()
 	for {
-		state, err := cli.PipelineState(ctx, pid)
+		state, err := common.Fullstate(ctx, cli, pid)
 		if err != nil {
-			return errors.Wrapf(err, "cannot get state of pipeline with processID %s", pid)
+			return err
 		}
+		tm.Clear()
 		tm.MoveCursor(1, 1)
-		common.PrintPipeline(tm.Screen, api.PipelineState(state), pid, common.PrintOptions{})
+		common.PrintPipeline(tm.Screen, state, pid, common.PrintOptions{})
 		tm.Flush()
 		if state.Status.Finished() {
 			break

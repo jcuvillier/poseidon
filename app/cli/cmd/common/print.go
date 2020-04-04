@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -8,6 +9,12 @@ import (
 	"sort"
 	"text/tabwriter"
 	"time"
+)
+
+const (
+	progressBarWidth       = 20
+	progressBarChar        = "■"
+	progressBarPlaceholder = "·"
 )
 
 var (
@@ -47,8 +54,8 @@ func PrintPipeline(w io.Writer, pipeline api.PipelineState, pid string, opts Pri
 	fmt.Fprintln(w)
 
 	tw.Init(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NODE\tDURATION")
-	fmt.Fprintf(tw, "%s %s\t\n", jobStatusIconMap[pipeline.Status], pipeline.Name)
+	fmt.Fprintln(tw, "NODE\tDURATION\tPROGRESSION")
+	fmt.Fprintf(tw, "%s %s\t\t\n", jobStatusIconMap[pipeline.Status], pipeline.Name)
 
 	// Filter nodes with status CREATED
 	var nodes []api.NodeState
@@ -73,7 +80,47 @@ func PrintPipeline(w io.Writer, pipeline api.PipelineState, pid string, opts Pri
 }
 
 func printNode(w io.Writer, node api.NodeState, prefix string, opts PrintOptions) {
-	fmt.Fprintf(w, "%s %s %s\t%s\n", prefix, jobStatusIconMap[node.Status], node.Name, duration(node.StartTime, node.EndTime))
+	fmt.Fprintf(w, "%s %s %s\t%s\t%s\n", prefix, jobStatusIconMap[node.Status], node.Name, duration(node.StartTime, node.EndTime), jobProgression(node.Jobs))
+}
+
+// jobProgression returns a string to be printed for job progression
+func jobProgression(jobs []api.JobState) string {
+	total := len(jobs)
+	switch total {
+	case 0:
+		return ""
+	case 1:
+		if jobs[0].Status.Finished() {
+			return "1/1"
+		}
+		return "0/1"
+	default:
+		// Count non finished job
+		finished := 0
+		for _, j := range jobs {
+			if j.Status.Finished() {
+				finished++
+			}
+		}
+		if finished == total {
+			return fmt.Sprintf("%d/%d", finished, total)
+		}
+		return fmt.Sprintf("%s %d/%d", progressBar(finished, total), finished, total)
+	}
+
+}
+
+func progressBar(current, total int) string {
+	value := (current * progressBarWidth) / total
+	buf := bytes.NewBuffer(make([]byte, progressBarWidth))
+	for i := 0; i < progressBarWidth; i++ {
+		if i < value {
+			fmt.Fprintf(buf, progressBarChar)
+		} else {
+			fmt.Fprintf(buf, progressBarPlaceholder)
+		}
+	}
+	return buf.String()
 }
 
 func date(t *time.Time) string {
