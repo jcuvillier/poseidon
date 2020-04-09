@@ -16,8 +16,8 @@ type SetupFunc func(ctx context.Context) error
 // TearDownFunc is the function called when a pipeline is finished. (Either success or failure)
 type TearDownFunc func(ctx context.Context) error
 
-// Pipeline defines the entries of the pipeline engine.
-type Pipeline interface {
+// Scheduler defines the entries of the pipeline engine.
+type Scheduler interface {
 	Executor() executor.Executor
 	// Submit the pipeline defined by the given spec with the given arguments.
 	Submit(ctx context.Context, spec api.PipelineSpec, args interface{}) error
@@ -45,24 +45,26 @@ type Pipeline interface {
 	NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error)
 }
 
-// New returns a new instance of Pipeline
-func New(e executor.Executor, s store.PipelineStore) (Pipeline, error) {
+// NewScheduler returns a new instance of Pipeline scheduler
+func NewScheduler(e executor.Executor, s store.PipelineStore) (Scheduler, error) {
 	c := make(chan executor.NodeFinished)
 	e.SetCallbackChan(c)
-	p := pipelineEngine{
+	p := scheduler{
 		s:    s,
 		exec: e,
 	}
-	go func(pip Pipeline, ch chan executor.NodeFinished) {
+
+	// The following go routine handles the NodeFinished events sent by the executors
+	go func(sc Scheduler, ch chan executor.NodeFinished) {
 		for {
 			nf := <-ch
 			ctx := context.Background()
 			ctx = context.WithCorrelationID(ctx, nf.CorrelationID)
 			ctx = context.WithProcessID(ctx, nf.ProcessID)
 			ctx = context.WithNodeName(ctx, nf.Nodename)
-			if err := pip.NodeFinished(ctx, nf.Nodename, nf.Status); err != nil {
-				if err := pip.Terminate(ctx, err.Error()); err != nil {
-					ctx.Logger().Error(errors.Wrapf(err, "cannot terminate pipeline %s"))
+			if err := sc.NodeFinished(ctx, nf.Nodename, nf.Status); err != nil {
+				if err := sc.Terminate(ctx, err.Error()); err != nil {
+					ctx.Logger().Error(errors.Wrapf(err, "cannot terminate pipeline %s", nf.ProcessID))
 				}
 			}
 		}
@@ -71,29 +73,29 @@ func New(e executor.Executor, s store.PipelineStore) (Pipeline, error) {
 	return &p, nil
 }
 
-type pipelineEngine struct {
+type scheduler struct {
 	s            store.PipelineStore
 	exec         executor.Executor
 	setupFunc    SetupFunc
 	teardownFunc TearDownFunc
 }
 
-func (p *pipelineEngine) Executor() executor.Executor {
-	return p.exec
+func (sc *scheduler) Executor() executor.Executor {
+	return sc.exec
 }
 
-func (p *pipelineEngine) Submit(ctx context.Context, spec api.PipelineSpec, args interface{}) error {
+func (sc *scheduler) Submit(ctx context.Context, spec api.PipelineSpec, args interface{}) error {
 	ctx.Logger().Infof("starting pipeline %s", spec.Name)
 	pid := ctx.ProcessID()
 	// Call setup func
-	if p.setupFunc != nil {
-		if err := p.setupFunc(ctx); err != nil {
+	if sc.setupFunc != nil {
+		if err := sc.setupFunc(ctx); err != nil {
 			return err
 		}
 	}
 
 	// Create pipeline & nodes into store
-	err := p.s.CreatePipeline(ctx, pid, spec, args)
+	err := sc.s.CreatePipeline(ctx, pid, spec, args)
 	if err != nil {
 		return errors.Wrapf(err, "cannot create pipeline %s", spec.Name)
 	}
@@ -101,33 +103,33 @@ func (p *pipelineEngine) Submit(ctx context.Context, spec api.PipelineSpec, args
 	for i := range spec.Nodes {
 		nodes[i] = spec.Nodes[i].Name
 	}
-	err = p.s.CreateNodes(ctx, pid, nodes)
+	err = sc.s.CreateNodes(ctx, pid, nodes)
 	if err != nil {
 		return errors.Wrapf(err, "cannot create nodes for pipeline %s", spec.Name)
 	}
 
-	if err := p.next(ctx); err != nil {
+	if err := sc.next(ctx); err != nil {
 		return err
 	}
 
-	p.s.SetPipelineStatus(ctx, ctx.ProcessID(), api.StatusRunning)
+	sc.s.SetPipelineStatus(ctx, ctx.ProcessID(), api.StatusRunning)
 
 	return nil
 }
 
 // next selects the next nodes to be submitted and submits them
-func (p *pipelineEngine) next(ctx context.Context) error {
+func (sc *scheduler) next(ctx context.Context) error {
 	pid := ctx.ProcessID()
-	args, err := p.s.GetPipelineArgs(ctx, pid)
+	args, err := sc.s.GetPipelineArgs(ctx, pid)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get pipeline arguments")
 	}
-	spec, err := p.s.GetPipelineSpec(ctx, pid)
+	spec, err := sc.s.GetPipelineSpec(ctx, pid)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get spec for pipeline %s", pid)
 	}
 
-	nodestatuses, err := p.s.GetNodeStatuses(ctx, pid)
+	nodestatuses, err := sc.s.GetNodeStatuses(ctx, pid)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get nodes with status for pipeline %s", pid)
 	}
@@ -152,43 +154,43 @@ func (p *pipelineEngine) next(ctx context.Context) error {
 
 	//Submit the nodes
 	for _, n := range nodesToSubmit {
-		params, err := p.nodeParameters(ctx, n, args)
+		params, err := sc.nodeParameters(ctx, n, args)
 		if err != nil {
 			return errors.Wrapf(err, "cannot compute parameters for node %s", n.Name)
 		}
-		if err := p.exec.Start(context.WithNodeName(ctx, n.Name), n, params); err != nil {
+		if err := sc.exec.Start(context.WithNodeName(ctx, n.Name), n, params); err != nil {
 			return errors.Wrapf(err, "cannot start node %s", n.Name)
 		}
 	}
 	return nil
 }
 
-func (p *pipelineEngine) NodeFinished(ctx context.Context, nodename string, status api.Status) error {
+func (sc *scheduler) NodeFinished(ctx context.Context, nodename string, status api.Status) error {
 	ctx.Logger().Infof("node %s finished with status %s", nodename, status)
 	if status == api.StatusFailed {
-		if err := p.stop(ctx, api.StatusFailed, false); err != nil {
+		if err := sc.stop(ctx, api.StatusFailed, false); err != nil {
 			return errors.Wrap(err, "cannot stop process")
 		}
 	}
-	finished, err := p.s.IsPipelineFinished(ctx, ctx.ProcessID())
+	finished, err := sc.s.IsPipelineFinished(ctx, ctx.ProcessID())
 	if err != nil {
 		return errors.Wrap(err, "cannot determine if pipeline is finished")
 	}
 	if finished { // Pipeline finished
-		if err := p.s.SetPipelineStatus(ctx, ctx.ProcessID(), status); err != nil {
+		if err := sc.s.SetPipelineStatus(ctx, ctx.ProcessID(), status); err != nil {
 			return errors.Wrapf(err, "cannot set status %s for pipeline", status)
 		}
 		ctx.Logger().Infof("pipeline finished with status %s", status)
 
 		//Call teardown func if set
-		if p.teardownFunc != nil {
-			err := p.teardownFunc(ctx)
+		if sc.teardownFunc != nil {
+			err := sc.teardownFunc(ctx)
 			if err != nil {
 				return errors.Wrap(err, "error calling teardown function")
 			}
 		}
 	} else {
-		if err := p.next(ctx); err != nil {
+		if err := sc.next(ctx); err != nil {
 			return err
 		}
 	}
@@ -196,28 +198,28 @@ func (p *pipelineEngine) NodeFinished(ctx context.Context, nodename string, stat
 	return nil
 }
 
-func (p *pipelineEngine) Terminate(ctx context.Context, reason string) error {
+func (sc *scheduler) Terminate(ctx context.Context, reason string) error {
 	ctx.Logger().Infof("terminating process %s because %s", ctx.ProcessID(), reason)
-	return p.stop(ctx, api.StatusTerminated, false)
+	return sc.stop(ctx, api.StatusTerminated, false)
 }
 
-func (p *pipelineEngine) Cancel(ctx context.Context, gracefully bool) error {
+func (sc *scheduler) Cancel(ctx context.Context, gracefully bool) error {
 	ctx.Logger().Infof("cancelling process %s", ctx.ProcessID())
-	return p.stop(ctx, api.StatusCancelled, gracefully)
+	return sc.stop(ctx, api.StatusCancelled, gracefully)
 }
 
-func (p *pipelineEngine) SetSetupFunc(f SetupFunc) {
-	p.setupFunc = f
+func (sc *scheduler) SetSetupFunc(f SetupFunc) {
+	sc.setupFunc = f
 }
 
-func (p *pipelineEngine) SetTearDownFunc(f TearDownFunc) {
-	p.teardownFunc = f
+func (sc *scheduler) SetTearDownFunc(f TearDownFunc) {
+	sc.teardownFunc = f
 }
 
 // stop stops the running pipeline and sets the given status (FAILED, CANCEL or TERMINATED)
 // If status is FAILED, all running nodes are terminates.
 // If gracefully is true, all running nodes finished normally
-func (p *pipelineEngine) stop(ctx context.Context, status api.Status, gracefully bool) error {
+func (sc *scheduler) stop(ctx context.Context, status api.Status, gracefully bool) error {
 	if gracefully {
 		return errors.New("gracefull stop not yet implemented")
 	}
@@ -225,14 +227,14 @@ func (p *pipelineEngine) stop(ctx context.Context, status api.Status, gracefully
 	if status == api.StatusFailed {
 		nodeStatus = api.StatusTerminated
 	}
-	statuses, err := p.s.GetNodeStatuses(ctx, ctx.ProcessID())
+	statuses, err := sc.s.GetNodeStatuses(ctx, ctx.ProcessID())
 	if err != nil {
 		return errors.Wrap(err, "cannot get nodes status")
 	}
 	for n, s := range statuses {
 		if !s.Finished() {
 			ctx = context.WithNodeName(ctx, n)
-			p.exec.Stop(ctx, ctx.ProcessID(), n, nodeStatus, gracefully)
+			sc.exec.Stop(ctx, ctx.ProcessID(), n, nodeStatus, gracefully)
 		}
 	}
 	return nil
@@ -262,7 +264,7 @@ func nodeDepsCompleted(ctx context.Context, node api.NodeSpec, statuses map[stri
 	return true
 }
 
-func (p *pipelineEngine) nodeParameters(ctx context.Context, node api.NodeSpec, args interface{}) ([]interface{}, error) {
+func (sc *scheduler) nodeParameters(ctx context.Context, node api.NodeSpec, args interface{}) ([]interface{}, error) {
 	// Map containing node results
 	nodeResults := make(map[string]interface{})
 	nodeResults[api.InputPipelineArgs] = args
@@ -277,7 +279,7 @@ func (p *pipelineEngine) nodeParameters(ctx context.Context, node api.NodeSpec, 
 	// Also identify batch nodes
 	for _, d := range deps {
 		if d.Name != api.InputPipelineArgs {
-			r, err := p.exec.NodeResult(ctx, ctx.ProcessID(), d.Name)
+			r, err := sc.exec.NodeResult(ctx, ctx.ProcessID(), d.Name)
 			if err != nil {
 				return nil, errors.Wrapf(err, "cannot get result for node %s", d.Name)
 			}
@@ -338,8 +340,8 @@ func param(ctx context.Context, index int, input interface{}, nodeResults map[st
 	return input
 }
 
-func (p *pipelineEngine) ListPipelines(ctx context.Context) ([]api.PipelineInfo, error) {
-	pipelines, err := p.s.ListPipelines(ctx)
+func (sc *scheduler) ListPipelines(ctx context.Context) ([]api.PipelineInfo, error) {
+	pipelines, err := sc.s.ListPipelines(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot list pipelines")
 	}
@@ -353,10 +355,10 @@ func (p *pipelineEngine) ListPipelines(ctx context.Context) ([]api.PipelineInfo,
 	return res, nil
 }
 
-func (p *pipelineEngine) PipelineState(ctx context.Context, pid string) (api.PipelineState, error) {
-	return p.s.PipelineState(ctx, pid)
+func (sc *scheduler) PipelineState(ctx context.Context, pid string) (api.PipelineState, error) {
+	return sc.s.PipelineState(ctx, pid)
 }
 
-func (p *pipelineEngine) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
-	return p.exec.NodeState(ctx, pid, nodename)
+func (sc *scheduler) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
+	return sc.exec.NodeState(ctx, pid, nodename)
 }

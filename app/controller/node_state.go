@@ -14,7 +14,7 @@ func (h handlers) NodeState(c echo.Context) error {
 	ctx := context.FromContext(c.Request().Context())
 	pid := c.Param(client.ProcessIDParam)
 	nodename := c.Param(client.NodenameParam)
-	state, err := h.p.Executor().NodeState(ctx, pid, nodename)
+	state, err := h.sc.Executor().NodeState(ctx, pid, nodename)
 	if err != nil {
 		if errors.As(errors.Cause(err), &store.ErrNotFound{}) {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())

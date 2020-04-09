@@ -59,8 +59,8 @@ func main() {
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%s", port)))
 }
 
-// NewPipelineEngine instantiate a new pipeline engine
-func NewPipelineEngine(ctx context.Context) (pipeline.Pipeline, error) {
+// NewScheduler instantiate a new pipeline scheduler
+func NewScheduler(ctx context.Context) (pipeline.Scheduler, error) {
 	b, err := broker.NewFromEnv(ctx)
 	if err != nil {
 		return nil, err
@@ -91,5 +91,5 @@ func NewPipelineEngine(ctx context.Context) (pipeline.Pipeline, error) {
 }
 
 type handlers struct {
-	p pipeline.Pipeline
+	sc pipeline.Scheduler
 }
