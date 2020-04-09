@@ -1,0 +1,24 @@
+version: '3'
+services:
+  controller:
+    build:
+      context: ../../
+      dockerfile: app/controller/Dockerfile-waitforit
+    image: poseidon/controller
+    command: /usr/local/bin/waitforit -address amqp://rabbimq:5672 -timeout 30 && /app/controller
+    ports:
+      - "8080:8080"
+    env_file: 
+      - controller.env
+    depends_on: 
+      - rabbitmq
+    restart: on-failure
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "9000:15672"
+      - "5672:5672"
+    logging:
+      driver: "none"
+      
+    
