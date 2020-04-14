@@ -19,7 +19,7 @@ func (h handlers) Submit(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if err := h.p.Submit(ctx, req.PipelineSpec, req.Args); err != nil {
+	if err := h.sc.Submit(ctx, req.PipelineSpec, req.Args); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 

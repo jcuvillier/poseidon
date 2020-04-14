@@ -1,4 +1,4 @@
-package pipeline
+package scheduler
 
 import (
 	"poseidon/pkg/api"

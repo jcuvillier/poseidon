@@ -14,7 +14,7 @@ func (h handlers) PipelineState(c echo.Context) error {
 	ctx := context.FromContext(c.Request().Context())
 
 	pid := c.Param(client.ProcessIDParam)
-	ps, err := h.p.PipelineState(ctx, pid)
+	ps, err := h.sc.PipelineState(ctx, pid)
 	if err != nil {
 		if errors.As(errors.Cause(err), &store.ErrNotFound{}) {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())

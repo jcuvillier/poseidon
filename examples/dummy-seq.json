@@ -14,9 +14,9 @@
         }
     ],
     "args": {
-        "delay": "20s",
+        "delay": "2s",
         "payload": {
-            "delay": "10s",
+            "delay": "1s",
             "payload": "YOUHOU"
         }
     }

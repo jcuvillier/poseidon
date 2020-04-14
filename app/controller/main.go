@@ -8,7 +8,7 @@ import (
 	"poseidon/pkg/client"
 	"poseidon/pkg/context"
 	"poseidon/pkg/executor"
-	"poseidon/pkg/pipeline"
+	"poseidon/pkg/scheduler"
 	"poseidon/pkg/store"
 
 	"github.com/labstack/echo/v4"
@@ -30,7 +30,7 @@ func main() {
 	e.Logger = &l
 
 	//Instantiate pipeline engine
-	pip, err := NewPipelineEngine(ctx)
+	sc, err := NewScheduler(ctx)
 	if err != nil {
 		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate pipeline engine"))
 		os.Exit(1)
@@ -38,7 +38,7 @@ func main() {
 
 	//Setup routes
 	h := handlers{
-		p: pip,
+		sc: sc,
 	}
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello, World!")
@@ -60,7 +60,7 @@ func main() {
 }
 
 // NewScheduler instantiate a new pipeline scheduler
-func NewScheduler(ctx context.Context) (pipeline.Scheduler, error) {
+func NewScheduler(ctx context.Context) (scheduler.Scheduler, error) {
 	b, err := broker.NewFromEnv(ctx)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func NewScheduler(ctx context.Context) (pipeline.Scheduler, error) {
 		return nil, err
 	}
 
-	pip, err := pipeline.New(exec, s)
+	sc, err := scheduler.NewScheduler(exec, s)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,9 +87,9 @@ func NewScheduler(ctx context.Context) (pipeline.Scheduler, error) {
 			os.Exit(1)
 		}
 	}()
-	return pip, nil
+	return sc, nil
 }
 
 type handlers struct {
-	sc pipeline.Scheduler
+	sc scheduler.Scheduler
 }
