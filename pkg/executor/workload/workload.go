@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxParallelism = 50
+	maxParallelism = 5
 )
 
 // Workload defines how the workload is scheduled and deleted.
@@ -23,7 +23,10 @@ type Workload interface {
 
 // New returns a new Workload
 func New() (Workload, error) {
-	return newDockerWorkload()
+	return NewK8SJobWorkload(K8SJobWorkloadConfig{
+		OutOfCluster: true,
+		BrokerSecret: "broker-conf-db9b792g55",
+	})
 }
 
 type dummy struct{}

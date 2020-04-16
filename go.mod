@@ -13,6 +13,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.4
 	github.com/hashicorp/go-retryablehttp v0.6.4
+	github.com/imdario/mergo v0.3.9 // indirect
 	github.com/labstack/echo v3.3.10+incompatible // indirect
 	github.com/labstack/echo/v4 v4.1.15
 	github.com/labstack/gommon v0.3.0 // indirect
@@ -32,7 +33,8 @@ require (
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sys v0.0.0-20200327173247-9dae0f8f5775 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
-	k8s.io/api v0.17.4 // indirect
-	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/api v0.17.4
+	k8s.io/apimachinery v0.17.4
+	k8s.io/client-go v0.17.0
 	k8s.io/utils v0.0.0-20200229041039-0a110f9eb7ab // indirect
 )
