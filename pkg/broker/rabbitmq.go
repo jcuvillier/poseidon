@@ -3,7 +3,7 @@ package broker
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"poseidon/pkg/api"
 	"poseidon/pkg/context"
 	"poseidon/pkg/events"
 	"poseidon/pkg/store"
@@ -13,34 +13,40 @@ import (
 )
 
 const (
-	HeaderProcessID     = "process_id"
-	HeaderNodename      = "node_name"
-	HeaderJobID         = "job_id"
-	HeaderType          = "type"
-	HeaderCorrelationID = "correlation_id"
-	HeaderExecutionID   = "execution_id"
-
 	envRabbitMQUser     = "BROKER_RABBITMQ_USER"
 	envRabbitMQPassword = "BROKER_RABBITMQ_PASSWORD"
 	envRabbitMQURI      = "BROKER_RABBITMQ_URI"
-	rabbitmqType        = "RABBITMQ"
+	// RabbitMQType Broker type RabbitMQ
+	RabbitMQType Type = "rabbitmq"
 )
+
+func init() {
+	f := func(ctx context.Context, c interface{}) (Broker, error) {
+		asRabbitMQConf, isRabbitMQConf := c.(*RabbitMQConfig)
+		if !isRabbitMQConf {
+			return nil, errors.Errorf("given configuration struct is not type %v", RabbitMQConfig{})
+		}
+		return NewRabbitMQBroker(ctx, *asRabbitMQConf)
+	}
+	register(RabbitMQType, f, &RabbitMQConfig{})
+}
 
 type rabbitmq struct {
 	conn   *amqp.Connection
 	ch     *amqp.Channel
-	config Config
+	config RabbitMQConfig
 }
 
-type rabbitmqconfig struct {
-	user     string
-	password string
-	uri      string
+// RabbitMQConfig is configuration for rabbitmq broker implementation
+type RabbitMQConfig struct {
+	User     string `json:"user" env:"BROKER_RABBITMQ_USER"`
+	Password string `json:"password" env:"BROKER_RABBITMQ_USER"`
+	URI      string `json:"uri" env:"BROKER_RABBITMQ_URI"`
 }
 
 //NewRabbitMQBroker returns a Broker implementation based on RabbitMQ.
-func NewRabbitMQBroker(ctx context.Context, conf rabbitmqconfig) (Broker, error) {
-	url := fmt.Sprintf("amqp://%s:%s@%s", conf.user, conf.password, conf.uri)
+func NewRabbitMQBroker(ctx context.Context, conf RabbitMQConfig) (Broker, error) {
+	url := fmt.Sprintf("amqp://%s:%s@%s", conf.User, conf.Password, conf.URI)
 	ctx.Logger().Infof("connecting to rabbitmq with url '%s'", url)
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -65,14 +71,11 @@ func (q *rabbitmq) Publish(ctx context.Context, evt events.Event, qname, routing
 	ctx.Logger().Tracef("publishing event %s to exchange %s", evt, qname)
 	//Headers
 	headers := amqp.Table{
-		HeaderProcessID:     evt.ProcessID,
-		HeaderNodename:      evt.NodeName,
-		HeaderJobID:         evt.JobID,
-		HeaderCorrelationID: evt.CorrelationID,
-		HeaderType:          string(evt.Type),
-	}
-	if evt.ExecutionID != "" {
-		headers[HeaderExecutionID] = evt.ExecutionID
+		api.HeaderProcessID:     evt.ProcessID,
+		api.HeaderNodename:      evt.NodeName,
+		api.HeaderJobID:         evt.JobID,
+		api.HeaderCorrelationID: evt.CorrelationID,
+		api.HeaderType:          string(evt.Type),
 	}
 
 	// Marshal body
@@ -119,7 +122,7 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 		case "application/json":
 			if err := json.Unmarshal(d.Body, &data); err != nil {
 				d.Reject(false)
-				return errors.Wrapf(err, "cannot unmarshal received event %s for job %s of node %s, droping event", d.Headers[HeaderType], d.Headers[HeaderJobID], d.Headers[HeaderNodename])
+				return errors.Wrapf(err, "cannot unmarshal received event %s for job %s of node %s, droping event", d.Headers[api.HeaderType], d.Headers[api.HeaderJobID], d.Headers[api.HeaderNodename])
 			}
 		default:
 			ctx.Logger().Warnf("received event with unsupported content-type %s, dropping event", d.ContentType)
@@ -128,15 +131,15 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 		}
 
 		// Create event
-		pid := d.Headers[HeaderProcessID].(string)
-		correlationID := d.Headers[HeaderCorrelationID].(string)
+		pid := d.Headers[api.HeaderProcessID].(string)
+		correlationID := d.Headers[api.HeaderCorrelationID].(string)
 		evt := events.Event{
-			Type:          events.EventType(d.Headers[HeaderType].(string)),
+			Type:          events.EventType(d.Headers[api.HeaderType].(string)),
 			CorrelationID: correlationID,
 			ProcessID:     pid,
-			NodeName:      d.Headers[HeaderNodename].(string),
-			ExecutionID:   d.Headers[HeaderExecutionID].(string),
-			JobID:         d.Headers[HeaderJobID].(string),
+			NodeName:      d.Headers[api.HeaderNodename].(string),
+			ExecutionID:   d.Headers[api.HeaderExecutionID].(string),
+			JobID:         d.Headers[api.HeaderJobID].(string),
 			Data:          data,
 		}
 
@@ -195,7 +198,7 @@ func reject(ctx context.Context, evt events.Event, d *amqp.Delivery) {
 }
 
 func (q *rabbitmq) CreateQueue(ctx context.Context, name, bindTo string) error {
-	ctx.Logger().Tracef("creating queue %s with routing headers %s=%s and %s=%s", name, HeaderProcessID, ctx.ProcessID(), HeaderNodename, ctx.NodeName())
+	ctx.Logger().Tracef("creating queue %s with routing headers %s=%s and %s=%s", name, api.HeaderProcessID, ctx.ProcessID(), api.HeaderNodename, ctx.NodeName())
 	_, err := q.ch.QueueDeclare(
 		name,  // name
 		true,  // durable
@@ -214,13 +217,13 @@ func (q *rabbitmq) CreateQueue(ctx context.Context, name, bindTo string) error {
 		bindTo, // exchange
 		false,
 		amqp.Table{
-			"x-match":       "all", //x-match = all means all headers must match for the routing,
-			HeaderProcessID: ctx.ProcessID(),
-			HeaderNodename:  ctx.NodeName(),
+			"x-match":           "all", //x-match = all means all headers must match for the routing,
+			api.HeaderProcessID: ctx.ProcessID(),
+			api.HeaderNodename:  ctx.NodeName(),
 		},
 	)
 	if err != nil {
-		return errors.Wrapf(err, "cannot bind queue %s to exchange %s with routing headers %s=%s and %s=%s", name, bindTo, HeaderProcessID, ctx.ProcessID(), HeaderNodename, ctx.NodeName())
+		return errors.Wrapf(err, "cannot bind queue %s to exchange %s with routing headers %s=%s and %s=%s", name, bindTo, api.HeaderProcessID, ctx.ProcessID(), api.HeaderNodename, ctx.NodeName())
 	}
 	return nil
 }
@@ -244,44 +247,4 @@ func (q *rabbitmq) Close() error {
 		return err
 	}
 	return nil
-}
-
-func (q *rabbitmq) Config() Config {
-	return q.config
-}
-
-type rabbitmqFactory struct{}
-
-func (f rabbitmqFactory) newFromConfig(ctx context.Context, config interface{}) (Broker, error) {
-	return nil, nil
-}
-
-func (f rabbitmqFactory) newFromEnv(ctx context.Context) (Broker, error) {
-	user := os.Getenv(envRabbitMQUser)
-	if user == "" {
-		return nil, errors.Errorf("missing env %s", envRabbitMQUser)
-	}
-	password := os.Getenv(envRabbitMQPassword)
-	if password == "" {
-		return nil, errors.Errorf("missing env %s", envRabbitMQPassword)
-	}
-	uri := os.Getenv(envRabbitMQURI)
-	if uri == "" {
-		return nil, errors.Errorf("missing env %s", envRabbitMQURI)
-	}
-
-	return NewRabbitMQBroker(ctx, rabbitmqconfig{
-		user:     user,
-		password: password,
-		uri:      uri,
-	})
-}
-
-func (c rabbitmqconfig) ToEnv() map[string]string {
-	env := make(map[string]string)
-	env[envBrokerType] = rabbitmqType
-	env[envRabbitMQUser] = c.user
-	env[envRabbitMQPassword] = c.password
-	env[envRabbitMQURI] = c.uri
-	return env
 }
