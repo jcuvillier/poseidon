@@ -138,7 +138,6 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 			CorrelationID: correlationID,
 			ProcessID:     pid,
 			NodeName:      d.Headers[api.HeaderNodename].(string),
-			ExecutionID:   d.Headers[api.HeaderExecutionID].(string),
 			JobID:         d.Headers[api.HeaderJobID].(string),
 			Data:          data,
 		}
@@ -147,7 +146,6 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 		ctx := context.Background()
 		ctx = context.WithProcessID(ctx, pid)
 		ctx = context.WithCorrelationID(ctx, correlationID)
-		ctx = context.WithExecutionID(ctx, evt.ExecutionID)
 		ctx = context.WithNodeName(ctx, evt.NodeName)
 		ctx = context.WithJobID(ctx, evt.JobID)
 

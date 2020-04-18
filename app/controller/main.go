@@ -7,7 +7,8 @@ import (
 	"poseidon/pkg/broker"
 	"poseidon/pkg/client"
 	"poseidon/pkg/context"
-	"poseidon/pkg/executor"
+	"poseidon/pkg/executor/triton"
+	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/scheduler"
 	"poseidon/pkg/store"
 
@@ -71,7 +72,19 @@ func NewScheduler(ctx context.Context) (scheduler.Scheduler, error) {
 		return nil, err
 	}
 
-	exec, err := executor.New(b, "poseidon.ex.process", s)
+	w, err := workload.NewDockerWorkload(workload.DockerWorkloadConfig{
+		Env: map[string]string{
+			"BROKER_TYPE":              "RABBITMQ",
+			"BROKER_RABBITMQ_USER":     "guest",
+			"BROKER_RABBITMQ_PASSWORD": "guest",
+			"BROKER_RABBITMQ_URI":      "127.0.0.1:5672",
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	exec, err := triton.New(b, "poseidon.ex.process", s, w)
 	if err != nil {
 		return nil, err
 	}

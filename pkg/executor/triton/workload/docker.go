@@ -15,19 +15,29 @@ import (
 	"github.com/docker/docker/client"
 )
 
-type docker struct {
-	cli *client.Client
+// DockerWorkloadConfig is config struct for docker workload
+type DockerWorkloadConfig struct {
+	Env map[string]string
 }
 
-func newDockerWorkload() (Workload, error) {
+type docker struct {
+	cli    *client.Client
+	config DockerWorkloadConfig
+}
+
+// NewDockerWorkload returns a new instance of Workload using docker
+func NewDockerWorkload(config DockerWorkloadConfig) (Workload, error) {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create docker client")
 	}
-	return docker{cli}, nil
+	return docker{
+		cli:    cli,
+		config: config,
+	}, nil
 }
 
-func (d docker) Schedule(ctx context.Context, spec api.NodeSpec, env map[string]string, n int) error {
+func (d docker) Schedule(ctx context.Context, spec api.NodeSpec, n int) error {
 	p := parallelism(n, spec.Parallelism)
 	ctx.Logger().Tracef("scheduling workload for node %s with parallelism %d", spec.Name, p)
 
@@ -36,7 +46,7 @@ func (d docker) Schedule(ctx context.Context, spec api.NodeSpec, env map[string]
 		fmt.Sprintf("%s=%s", worker.EnvNodeName, ctx.NodeName()),
 		fmt.Sprintf("%s=%s", worker.EnvPublishQName, "poseidon.ex.events"),
 	}
-	for k, v := range env {
+	for k, v := range d.config.Env {
 		containerEnv = append(containerEnv, fmt.Sprintf("%s=%s", k, v))
 	}
 

@@ -76,7 +76,7 @@ func NewK8SJobWorkload(config K8SJobWorkloadConfig) (Workload, error) {
 	}, nil
 }
 
-func (k k8sJob) Schedule(ctx context.Context, spec api.NodeSpec, env map[string]string, n int) error {
+func (k k8sJob) Schedule(ctx context.Context, spec api.NodeSpec, n int) error {
 	var p int32 = int32(parallelism(n, spec.Parallelism))
 	ctx.Logger().Tracef("scheduling workload for node %s with parallelism at %d", spec.Name, p)
 	jobClient := k.clientset.BatchV1().Jobs(k.config.Namespace)
@@ -95,12 +95,6 @@ func (k k8sJob) Schedule(ctx context.Context, spec api.NodeSpec, env map[string]
 			Name:  worker.EnvPublishQName,
 			Value: "poseidon.ex.events",
 		},
-	}
-	for k, v := range env {
-		containerEnv = append(containerEnv, apiv1.EnvVar{
-			Name:  k,
-			Value: v,
-		})
 	}
 	//Create actual Job
 	var backoffLimit int32 = 5

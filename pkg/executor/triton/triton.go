@@ -1,4 +1,4 @@
-package executor
+package triton
 
 import (
 	"fmt"
@@ -6,35 +6,46 @@ import (
 	"poseidon/pkg/broker"
 	"poseidon/pkg/context"
 	"poseidon/pkg/events"
-	"poseidon/pkg/executor/workload"
+	"poseidon/pkg/executor"
+	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/store"
 	"strconv"
 
 	"github.com/pkg/errors"
 )
 
-type exec struct {
-	w            workload.Workload
-	s            store.ExecutorStore
-	callback     chan NodeFinished
-	b            broker.Broker
+type triton struct {
+	workload     workload.Workload
+	store        store.ExecutorStore
+	callback     chan executor.NodeFinished
+	broker       broker.Broker
 	publishQName string
 }
 
-func (e *exec) Start(ctx context.Context, spec api.NodeSpec, params []interface{}) error {
+// New returns a new triton executor with the given components
+func New(broker broker.Broker, publishQName string, store store.ExecutorStore, workload workload.Workload) (executor.Executor, error) {
+	return &triton{
+		broker:       broker,
+		publishQName: publishQName,
+		store:        store,
+		workload:     workload,
+	}, nil
+}
+
+func (t *triton) Start(ctx context.Context, spec api.NodeSpec, params []interface{}) error {
 	ctx.Logger().Infof("starting node %s", spec.Name)
 	// Create jobs
-	if err := e.s.CreateJobs(ctx, ctx.ProcessID(), spec.Name, params); err != nil {
+	if err := t.store.CreateJobs(ctx, ctx.ProcessID(), spec.Name, params); err != nil {
 		return errors.Wrapf(err, "cannot create jobs for node %s", spec.Name)
 	}
 
 	// Create processing queue
-	if err := e.b.CreateQueue(ctx, qname(ctx), e.publishQName); err != nil {
+	if err := t.broker.CreateQueue(ctx, qname(ctx), t.publishQName); err != nil {
 		return errors.Wrapf(err, "cannot create processing queue %s for node %s", qname(ctx), spec.Name)
 	}
 
 	//Schedule workload
-	if err := e.w.Schedule(ctx, spec, e.b.Config().ToEnv(), len(params)); err != nil {
+	if err := t.workload.Schedule(ctx, spec, len(params)); err != nil {
 		return errors.Wrapf(err, "cannot schedule workload for node %s", spec.Name)
 	}
 
@@ -50,61 +61,61 @@ func (e *exec) Start(ctx context.Context, spec api.NodeSpec, params []interface{
 			CorrelationID: ctx.CorrelationID(),
 			ExecutionID:   "abc",
 		}
-		if err := e.b.Publish(ctx, evt, e.publishQName, ctx.ProcessID()); err != nil {
+		if err := t.broker.Publish(ctx, evt, t.publishQName, ctx.ProcessID()); err != nil {
 			return errors.Wrapf(err, "cannot publish %s event for node %s and jobID %s", string(events.TypeSubmit), spec.Name, jobID)
 		}
 	}
-	e.s.SetNodeStatus(ctx, ctx.ProcessID(), spec.Name, api.StatusSubmitted)
+	t.store.SetNodeStatus(ctx, ctx.ProcessID(), spec.Name, api.StatusSubmitted)
 	return nil
 }
 
-func (e *exec) Stop(ctx context.Context, pid, nodename string, status api.Status, gracefully bool) error {
+func (t *triton) Stop(ctx context.Context, pid, nodename string, status api.Status, gracefully bool) error {
 	if gracefully {
 		return errors.New("graceful stop not yet implemented")
 	}
 
 	// Stop jobs in store
-	if err := e.s.StopJobs(ctx, pid, nodename, status); err != nil {
+	if err := t.store.StopJobs(ctx, pid, nodename, status); err != nil {
 		return errors.Wrapf(err, "cannot stop jobs for node %s", nodename)
 	}
 
 	//Delete the process queue
-	if err := e.b.DeleteQueue(ctx, qname(ctx)); err != nil {
+	if err := t.broker.DeleteQueue(ctx, qname(ctx)); err != nil {
 		return errors.Wrapf(err, "cannot delete running jobs for node %s", nodename)
 	}
 
 	// Delete the workload
-	if err := e.w.Delete(ctx, nodename); err != nil {
+	if err := t.workload.Delete(ctx, nodename); err != nil {
 		return errors.Wrapf(err, "cannot stop workload for node %s", nodename)
 	}
 
-	if err := e.s.SetNodeStatus(ctx, pid, nodename, status); err != nil {
+	if err := t.store.SetNodeStatus(ctx, pid, nodename, status); err != nil {
 		return errors.Wrapf(err, "cannot set status %s to node %s", status, nodename)
 	}
 	return nil
 }
 
-func (e *exec) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
-	return e.s.NodeState(ctx, pid, nodename)
+func (t *triton) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
+	return t.store.NodeState(ctx, pid, nodename)
 }
 
-func (e *exec) NodeResult(ctx context.Context, pid, nodename string) (interface{}, error) {
-	return e.s.NodeResult(ctx, pid, nodename)
+func (t *triton) NodeResult(ctx context.Context, pid, nodename string) (interface{}, error) {
+	return t.store.NodeResult(ctx, pid, nodename)
 }
 
-func (e *exec) JobState(ctx context.Context, pid, nodename, jobid string) (api.JobState, error) {
-	return e.s.JobState(ctx, pid, nodename, jobid)
+func (t *triton) JobState(ctx context.Context, pid, nodename, jobid string) (api.JobState, error) {
+	return t.store.JobState(ctx, pid, nodename, jobid)
 }
 
-func (e *exec) JobResult(ctx context.Context, pid, nodename, jobid string) (interface{}, error) {
-	return e.s.JobResult(ctx, pid, nodename, jobid)
+func (t *triton) JobResult(ctx context.Context, pid, nodename, jobid string) (interface{}, error) {
+	return t.store.JobResult(ctx, pid, nodename, jobid)
 }
 
-func (e *exec) SetCallbackChan(c chan NodeFinished) {
-	e.callback = c
+func (t *triton) SetCallbackChan(c chan executor.NodeFinished) {
+	t.callback = c
 }
 
-func (e *exec) HandleEvent(ctx context.Context, evt events.Event) error {
+func (t *triton) HandleEvent(ctx context.Context, evt events.Event) error {
 	ctx.Logger().Tracef("receiving %s event for node %s and job %s", evt.Type, evt.NodeName, evt.JobID)
 	var status api.Status
 	var payload interface{}
@@ -123,7 +134,7 @@ func (e *exec) HandleEvent(ctx context.Context, evt events.Event) error {
 		return nil
 	}
 
-	js, err := e.s.GetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID)
+	js, err := t.store.GetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get status for job %s of node %s", evt.JobID, evt.NodeName)
 	}
@@ -132,27 +143,27 @@ func (e *exec) HandleEvent(ctx context.Context, evt events.Event) error {
 		return nil
 	}
 
-	if err := e.s.SetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID, status, evt.Time, payload); err != nil {
+	if err := t.store.SetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID, status, evt.Time, payload); err != nil {
 		return errors.Wrapf(err, "cannot set status %s for job %s of node %s", status, evt.JobID, evt.NodeName)
 	}
 	if status == api.StatusRunning {
 		// Set Node Running if not already running
-		if err := e.s.SetNodeRunning(ctx, ctx.ProcessID(), evt.NodeName); err != nil {
+		if err := t.store.SetNodeRunning(ctx, ctx.ProcessID(), evt.NodeName); err != nil {
 			return errors.Wrapf(err, "cannot set status %s for node %s", status, evt.NodeName)
 		}
 	} else if status.Finished() { // If status is final, check if the node is finished as well
-		s, err := e.computeNodeStatus(ctx, ctx.ProcessID(), evt.NodeName)
+		s, err := t.computeNodeStatus(ctx, ctx.ProcessID(), evt.NodeName)
 		if err != nil {
 			return errors.Wrap(err, "cannot compute node status")
 		}
 
 		if s.Finished() {
-			if err := e.Stop(ctx, ctx.ProcessID(), evt.NodeName, s, false); err != nil {
+			if err := t.Stop(ctx, ctx.ProcessID(), evt.NodeName, s, false); err != nil {
 				return err
 			}
 
-			if e.callback != nil {
-				e.callback <- NodeFinished{
+			if t.callback != nil {
+				t.callback <- executor.NodeFinished{
 					CorrelationID: evt.CorrelationID,
 					ProcessID:     evt.ProcessID,
 					Nodename:      evt.NodeName,
@@ -165,12 +176,12 @@ func (e *exec) HandleEvent(ctx context.Context, evt events.Event) error {
 }
 
 // computeNodeStatus computes a node status from the its job statuses
-func (e *exec) computeNodeStatus(ctx context.Context, pid, nodename string) (api.Status, error) {
-	statuses, err := e.s.GetJobsStatuses(ctx, pid, nodename)
+func (t *triton) computeNodeStatus(ctx context.Context, pid, nodename string) (api.Status, error) {
+	statuses, err := t.store.GetJobsStatuses(ctx, pid, nodename)
 	if err != nil {
 		return "", errors.Wrapf(err, "cannot get status for jobs of node %s", nodename)
 	}
-	spec, err := e.s.GetNodeSpec(ctx, pid, nodename)
+	spec, err := t.store.GetNodeSpec(ctx, pid, nodename)
 	if err != nil {
 		return "", errors.Wrapf(err, "cannot get specification of node %s", nodename)
 	}

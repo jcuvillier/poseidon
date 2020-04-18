@@ -2,13 +2,8 @@ package executor
 
 import (
 	"poseidon/pkg/api"
-	"poseidon/pkg/broker"
 	"poseidon/pkg/context"
 	"poseidon/pkg/events"
-	"poseidon/pkg/executor/workload"
-	"poseidon/pkg/store"
-
-	"github.com/pkg/errors"
 )
 
 // CallbackFunc is the function called when the node is done (either successfully or with error)
@@ -32,18 +27,4 @@ type Executor interface {
 	JobResult(ctx context.Context, pid, nodename, jobid string) (interface{}, error)
 	SetCallbackChan(chan NodeFinished)
 	HandleEvent(ctx context.Context, evt events.Event) error
-}
-
-// New returns a new instance of Executor
-func New(b broker.Broker, publishQName string, s store.ExecutorStore) (Executor, error) {
-	w, err := workload.New()
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot create new workload instance")
-	}
-	return &exec{
-		s:            s,
-		w:            w,
-		b:            b,
-		publishQName: publishQName,
-	}, nil
 }
