@@ -13,7 +13,7 @@ func (h handlers) NodeResult(c echo.Context) error {
 	ctx := context.FromContext(c.Request().Context())
 	pid := c.Param(processIDParam)
 	nodename := c.Param(nodenameParam)
-	result, err := h.sc.Executor().NodeResult(ctx, pid, nodename)
+	result, err := h.store.NodeResult(ctx, pid, nodename)
 	if err != nil {
 		if errors.As(errors.Cause(err), &store.ErrNotFound{}) {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())

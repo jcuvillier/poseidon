@@ -30,16 +30,23 @@ func main() {
 	l := log.MyLogger{Logger: ctx.Logger().Logger}
 	e.Logger = &l
 
-	//Instantiate pipeline engine
-	sc, err := NewScheduler(ctx)
+	store, err := store.NewInMemoryStore()
 	if err != nil {
-		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate pipeline engine"))
+		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate store"))
+		os.Exit(1)
+	}
+
+	//Instantiate pipeline engine
+	sc, err := NewScheduler(ctx, store)
+	if err != nil {
+		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate scheduler"))
 		os.Exit(1)
 	}
 
 	//Setup routes
 	h := handlers{
-		sc: sc,
+		sc:    sc,
+		store: store,
 	}
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello, World!")
@@ -61,13 +68,8 @@ func main() {
 }
 
 // NewScheduler instantiate a new pipeline scheduler
-func NewScheduler(ctx context.Context) (scheduler.Scheduler, error) {
+func NewScheduler(ctx context.Context, s store.Store) (scheduler.Scheduler, error) {
 	b, err := broker.NewFromEnv(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	s, err := store.NewInMemoryStore()
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func NewScheduler(ctx context.Context) (scheduler.Scheduler, error) {
 		return nil, err
 	}
 
-	exec, err := triton.New(b, "poseidon.ex.process", s, w)
+	exec, err := triton.New(ctx, b, "poseidon.ex.process", "poseidon.q.events", s, w)
 	if err != nil {
 		return nil, err
 	}
@@ -94,15 +96,10 @@ func NewScheduler(ctx context.Context) (scheduler.Scheduler, error) {
 		log.Fatal(err)
 	}
 
-	go func() {
-		if err := b.Receive(ctx, exec.HandleEvent, nil, "poseidon.q.events"); err != nil {
-			ctx.Logger().Fatal(err)
-			os.Exit(1)
-		}
-	}()
 	return sc, nil
 }
 
 type handlers struct {
-	sc scheduler.Scheduler
+	sc    scheduler.Scheduler
+	store store.Store
 }

@@ -18,7 +18,6 @@ type TearDownFunc func(ctx context.Context) error
 
 // Scheduler defines the entries of the pipeline engine.
 type Scheduler interface {
-	Executor() executor.Executor
 	// Submit the pipeline defined by the given spec with the given arguments.
 	Submit(ctx context.Context, spec api.PipelineSpec, args interface{}) error
 
@@ -36,17 +35,10 @@ type Scheduler interface {
 
 	// Set function to be called when a pipeline is finished. (Either success or failure)
 	SetTearDownFunc(TearDownFunc)
-
-	// ListPipelines returns a list of the pipelines in the system. Information returned are processID and name
-	ListPipelines(ctx context.Context) ([]api.PipelineInfo, error)
-
-	PipelineState(ctx context.Context, pid string) (api.PipelineState, error)
-
-	NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error)
 }
 
 // NewScheduler returns a new instance of Pipeline scheduler
-func NewScheduler(e executor.Executor, s store.PipelineStore) (Scheduler, error) {
+func NewScheduler(e executor.Executor, s store.Store) (Scheduler, error) {
 	c := make(chan executor.NodeFinished)
 	e.SetCallbackChan(c)
 	p := scheduler{
@@ -74,14 +66,10 @@ func NewScheduler(e executor.Executor, s store.PipelineStore) (Scheduler, error)
 }
 
 type scheduler struct {
-	s            store.PipelineStore
+	s            store.Store
 	exec         executor.Executor
 	setupFunc    SetupFunc
 	teardownFunc TearDownFunc
-}
-
-func (sc *scheduler) Executor() executor.Executor {
-	return sc.exec
 }
 
 func (sc *scheduler) Submit(ctx context.Context, spec api.PipelineSpec, args interface{}) error {
@@ -279,7 +267,7 @@ func (sc *scheduler) nodeParameters(ctx context.Context, node api.NodeSpec, args
 	// Also identify batch nodes
 	for _, d := range deps {
 		if d.Name != api.InputPipelineArgs {
-			r, err := sc.exec.NodeResult(ctx, ctx.ProcessID(), d.Name)
+			r, err := sc.s.NodeResult(ctx, ctx.ProcessID(), d.Name)
 			if err != nil {
 				return nil, errors.Wrapf(err, "cannot get result for node %s", d.Name)
 			}
@@ -338,27 +326,4 @@ func param(ctx context.Context, index int, input interface{}, nodeResults map[st
 		return input
 	}
 	return input
-}
-
-func (sc *scheduler) ListPipelines(ctx context.Context) ([]api.PipelineInfo, error) {
-	pipelines, err := sc.s.ListPipelines(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot list pipelines")
-	}
-	var res []api.PipelineInfo
-	for processID, name := range pipelines {
-		res = append(res, api.PipelineInfo{
-			ProcessID: processID,
-			Name:      name,
-		})
-	}
-	return res, nil
-}
-
-func (sc *scheduler) PipelineState(ctx context.Context, pid string) (api.PipelineState, error) {
-	return sc.s.PipelineState(ctx, pid)
-}
-
-func (sc *scheduler) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
-	return sc.exec.NodeState(ctx, pid, nodename)
 }

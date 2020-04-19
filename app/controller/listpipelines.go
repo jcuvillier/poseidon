@@ -15,11 +15,18 @@ type ListPipelinesResponse struct {
 
 func (h handlers) ListPipelines(c echo.Context) error {
 	ctx := context.FromContext(c.Request().Context())
-	pipelines, err := h.sc.ListPipelines(ctx)
+	pipelines, err := h.store.ListPipelines(ctx)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err)
 	}
+	var res []api.PipelineInfo
+	for processID, name := range pipelines {
+		res = append(res, api.PipelineInfo{
+			ProcessID: processID,
+			Name:      name,
+		})
+	}
 	return c.JSON(http.StatusOK, ListPipelinesResponse{
-		Pipelines: pipelines,
+		Pipelines: res,
 	})
 }

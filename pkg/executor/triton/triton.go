@@ -2,6 +2,7 @@ package triton
 
 import (
 	"fmt"
+	"os"
 	"poseidon/pkg/api"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/context"
@@ -23,13 +24,22 @@ type triton struct {
 }
 
 // New returns a new triton executor with the given components
-func New(broker broker.Broker, publishQName string, store store.ExecutorStore, workload workload.Workload) (executor.Executor, error) {
-	return &triton{
+func New(ctx context.Context, broker broker.Broker, publishQName, receiveQName string, store store.ExecutorStore, workload workload.Workload) (executor.Executor, error) {
+
+	t := &triton{
 		broker:       broker,
 		publishQName: publishQName,
 		store:        store,
 		workload:     workload,
-	}, nil
+	}
+	go func() {
+		if err := broker.Receive(ctx, t.handleEvent, nil, receiveQName); err != nil {
+			ctx.Logger().Fatal(err)
+			os.Exit(1)
+		}
+	}()
+
+	return t, nil
 }
 
 func (t *triton) Start(ctx context.Context, spec api.NodeSpec, params []interface{}) error {
@@ -95,27 +105,11 @@ func (t *triton) Stop(ctx context.Context, pid, nodename string, status api.Stat
 	return nil
 }
 
-func (t *triton) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
-	return t.store.NodeState(ctx, pid, nodename)
-}
-
-func (t *triton) NodeResult(ctx context.Context, pid, nodename string) (interface{}, error) {
-	return t.store.NodeResult(ctx, pid, nodename)
-}
-
-func (t *triton) JobState(ctx context.Context, pid, nodename, jobid string) (api.JobState, error) {
-	return t.store.JobState(ctx, pid, nodename, jobid)
-}
-
-func (t *triton) JobResult(ctx context.Context, pid, nodename, jobid string) (interface{}, error) {
-	return t.store.JobResult(ctx, pid, nodename, jobid)
-}
-
 func (t *triton) SetCallbackChan(c chan executor.NodeFinished) {
 	t.callback = c
 }
 
-func (t *triton) HandleEvent(ctx context.Context, evt events.Event) error {
+func (t *triton) handleEvent(ctx context.Context, evt events.Event) error {
 	ctx.Logger().Tracef("receiving %s event for node %s and job %s", evt.Type, evt.NodeName, evt.JobID)
 	var status api.Status
 	var payload interface{}
