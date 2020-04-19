@@ -11,31 +11,32 @@ This is not ordered by priority...
 - [ ] Cancel pipeline
 - [ ] Pause/Resume pipeline
 - [ ] Event hooks
-- [ ] HTTP Worker
 - [ ] Command Worker
-- [ ] K8s workload
+- [x] K8s workload
 - [ ] Continue on Fail
 - [ ] Conditional nodes
 - [ ] Pipeline in pipeline (aka pip)
 - [ ] TTL
 - [ ] Enhance Node's input syntax to support multiple batch and dependency string in other string
-- [ ] Add time info in store
+- [x] Add time info in store
 - [ ] Plug a tracing library
 - [ ] Log management
 - [ ] Add workload host info to jobs
+- [ ] Allow each node to be executed with a different executor
+- [ ] HTTP executor
 
 ## Resilience
 
 - [ ] Resilience with store and broker (retries, auto reconnect etc.)
-- [ ] Workload watch mechanism to detect issues after scheduling (no resource available for instance)
+- [ ] Workload healthcheck
 - [ ] Broker nack/reject policy depending on error
 - [ ] Error management
 - [ ] Purge mechanism to ensure there is no leaks (broker and workload artifacts)
 
 ## UX
 
-- [ ] Pipeline/Node/Job state endpoints in controller
-- [ ] Cli
+- [x] Pipeline/Node/Job state endpoints in controller
+- [x] Cli
 - [ ] GUI
 - [ ] OpenAPI doc
 - [ ] Write an actual README.md
