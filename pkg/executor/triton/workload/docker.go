@@ -3,7 +3,7 @@ package workload
 import (
 	"fmt"
 	"poseidon/pkg/api"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 	"poseidon/pkg/worker"
 
 	"github.com/docker/docker/api/types/filters"

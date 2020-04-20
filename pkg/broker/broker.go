@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	"poseidon/pkg/config"
-	"poseidon/pkg/context"
-	"poseidon/pkg/events"
+	"poseidon/pkg/broker/events"
+	"poseidon/pkg/util/config"
+	"poseidon/pkg/util/context"
 
 	"github.com/pkg/errors"
 )

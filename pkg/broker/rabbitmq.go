@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"poseidon/pkg/api"
-	"poseidon/pkg/context"
-	"poseidon/pkg/events"
+	"poseidon/pkg/util/context"
+	"poseidon/pkg/broker/events"
 	"poseidon/pkg/store"
 
 	"github.com/pkg/errors"

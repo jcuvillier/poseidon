@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 	"poseidon/pkg/worker"
 
 	"github.com/mitchellh/mapstructure"

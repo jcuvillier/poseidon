@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"poseidon/pkg/broker"
-	"poseidon/pkg/context"
-	"poseidon/pkg/events"
+	"poseidon/pkg/util/context"
+	"poseidon/pkg/broker/events"
 	"time"
 
 	"github.com/google/uuid"

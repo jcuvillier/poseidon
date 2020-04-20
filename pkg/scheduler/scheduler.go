@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"poseidon/pkg/api"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 	"poseidon/pkg/executor"
 	"poseidon/pkg/store"
 	"reflect"

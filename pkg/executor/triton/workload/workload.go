@@ -3,7 +3,7 @@ package workload
 import (
 	"math"
 	"poseidon/pkg/api"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 )
 
 const (

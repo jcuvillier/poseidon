@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 	"poseidon/pkg/client"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"

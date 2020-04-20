@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"poseidon/pkg/api"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"

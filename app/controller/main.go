@@ -6,7 +6,7 @@ import (
 	"os"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/client"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 	"poseidon/pkg/executor/triton"
 	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/scheduler"

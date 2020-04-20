@@ -3,14 +3,15 @@ package triton
 import (
 	"fmt"
 	"os"
+	"strconv"
+
 	"poseidon/pkg/api"
 	"poseidon/pkg/broker"
-	"poseidon/pkg/context"
-	"poseidon/pkg/events"
+	"poseidon/pkg/broker/events"
 	"poseidon/pkg/executor"
 	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/store"
-	"strconv"
+	"poseidon/pkg/util/context"
 
 	"github.com/pkg/errors"
 )

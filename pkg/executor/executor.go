@@ -2,7 +2,7 @@ package executor
 
 import (
 	"poseidon/pkg/api"
-	"poseidon/pkg/context"
+	"poseidon/pkg/util/context"
 )
 
 // CallbackFunc is the function called when the node is done (either successfully or with error)
