@@ -2,9 +2,9 @@ package scheduler
 
 import (
 	"poseidon/pkg/api"
-	"poseidon/pkg/util/context"
 	"poseidon/pkg/executor"
 	"poseidon/pkg/store"
+	"poseidon/pkg/util/context"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -38,12 +38,14 @@ type Scheduler interface {
 }
 
 // NewScheduler returns a new instance of Pipeline scheduler
-func NewScheduler(e executor.Executor, s store.Store) (Scheduler, error) {
+func NewScheduler(exec map[string]executor.Executor, s store.Store) (Scheduler, error) {
 	c := make(chan executor.NodeFinished)
-	e.SetCallbackChan(c)
+	for _, e := range exec {
+		e.SetCallbackChan(c)
+	}
 	p := scheduler{
 		s:    s,
-		exec: e,
+		exec: exec,
 	}
 
 	// The following go routine handles the NodeFinished events sent by the executors
@@ -67,7 +69,7 @@ func NewScheduler(e executor.Executor, s store.Store) (Scheduler, error) {
 
 type scheduler struct {
 	s            store.Store
-	exec         executor.Executor
+	exec         map[string]executor.Executor
 	setupFunc    SetupFunc
 	teardownFunc TearDownFunc
 }
@@ -146,7 +148,12 @@ func (sc *scheduler) next(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "cannot compute parameters for node %s", n.Name)
 		}
-		if err := sc.exec.Start(context.WithNodeName(ctx, n.Name), n, params); err != nil {
+
+		exec, ok := sc.exec[n.Kind]
+		if !ok {
+			return errors.Errorf("unknown executor %s in node %s", n.Kind, n.Name)
+		}
+		if err := exec.Start(context.WithNodeName(ctx, n.Name), n.ExecutorSpec, params); err != nil {
 			return errors.Wrapf(err, "cannot start node %s", n.Name)
 		}
 	}
@@ -211,6 +218,10 @@ func (sc *scheduler) stop(ctx context.Context, status api.Status, gracefully boo
 	if gracefully {
 		return errors.New("gracefull stop not yet implemented")
 	}
+	spec, err := sc.s.GetPipelineSpec(ctx, ctx.ProcessID())
+	if err != nil {
+		return errors.Wrap(err, "cannot get pipeline spec")
+	}
 	nodeStatus := api.StatusCancelled
 	if status == api.StatusFailed {
 		nodeStatus = api.StatusTerminated
@@ -219,10 +230,15 @@ func (sc *scheduler) stop(ctx context.Context, status api.Status, gracefully boo
 	if err != nil {
 		return errors.Wrap(err, "cannot get nodes status")
 	}
-	for n, s := range statuses {
-		if !s.Finished() {
-			ctx = context.WithNodeName(ctx, n)
-			sc.exec.Stop(ctx, ctx.ProcessID(), n, nodeStatus, gracefully)
+
+	for _, s := range spec.Nodes {
+		if !statuses[s.Name].Finished() {
+			ctx = context.WithNodeName(ctx, s.Name)
+			exec, ok := sc.exec[s.Kind]
+			if !ok {
+				return errors.Errorf("unknown executor %s in node %s", s.Kind, s.Name)
+			}
+			exec.Stop(ctx, ctx.ProcessID(), s.Name, nodeStatus, gracefully)
 		}
 	}
 	return nil

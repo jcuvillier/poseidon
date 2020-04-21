@@ -37,9 +37,9 @@ func NewDockerWorkload(config DockerWorkloadConfig) (Workload, error) {
 	}, nil
 }
 
-func (d docker) Schedule(ctx context.Context, spec api.NodeSpec, n int) error {
-	p := parallelism(n, spec.Parallelism)
-	ctx.Logger().Tracef("scheduling workload for node %s with parallelism %d", spec.Name, p)
+func (d docker) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
+	p := parallelism(n, spec.MaxWorker)
+	ctx.Logger().Tracef("scheduling workload for node %s with parallelism %d", ctx.NodeName(), p)
 
 	containerEnv := []string{
 		fmt.Sprintf("%s=%s", worker.EnvProcessID, ctx.ProcessID()),

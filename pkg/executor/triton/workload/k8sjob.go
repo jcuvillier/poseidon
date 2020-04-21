@@ -76,9 +76,9 @@ func NewK8SJobWorkload(config K8SJobWorkloadConfig) (Workload, error) {
 	}, nil
 }
 
-func (k k8sJob) Schedule(ctx context.Context, spec api.NodeSpec, n int) error {
-	var p int32 = int32(parallelism(n, spec.Parallelism))
-	ctx.Logger().Tracef("scheduling workload for node %s with parallelism at %d", spec.Name, p)
+func (k k8sJob) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
+	var p int32 = int32(parallelism(n, spec.MaxWorker))
+	ctx.Logger().Tracef("scheduling workload for node %s with parallelism at %d", ctx.NodeName(), p)
 	jobClient := k.clientset.BatchV1().Jobs(k.config.Namespace)
 
 	// Env

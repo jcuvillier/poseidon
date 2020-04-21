@@ -21,19 +21,13 @@ type PipelineSpec struct {
 
 // NodeSpec is the specification of a Node.
 type NodeSpec struct {
-	Name           string        `json:"name"`
-	Dependencies   []string      `json:"dependencies"`
-	Input          interface{}   `json:"input"`
-	Resources      ResourcesSpec `json:"resources"`
-	Parallelism    int           `json:"parallelism,omitempty"`
-	Image          string        `json:"image"`
-	ContinueOnFail bool          `json:"cof"`
-}
-
-type ResourcesSpec struct {
-	CPU    string `json:"cpu"`
-	Memory string `json:"memory"`
-	GPU    string `json:"gpu"`
+	// Kind is the executor to be used to execute the node
+	Kind           string      `json:"kind"`
+	Name           string      `json:"name"`
+	Dependencies   []string    `json:"dependencies"`
+	Input          interface{} `json:"input"`
+	ContinueOnFail bool        `json:"cof"`
+	ExecutorSpec   interface{} `json:"spec"`
 }
 
 // InputDependency is a structure representing a input dependency

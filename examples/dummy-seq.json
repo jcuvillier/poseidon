@@ -2,15 +2,23 @@
     "name": "foo",
     "nodes": [
         {
+            "kind": "triton",
             "name": "A",
-            "image": "poseidon/worker/dummy:latest",
-            "input": "@args"
+            "input": "@args",
+            "spec": {
+                "image": "poseidon/worker/dummy:latest"
+            }
         },
         {
+            "kind": "triton",
             "name": "B",
-            "image": "poseidon/worker/dummy:latest",
             "input": "@A",
-            "dependencies": ["A"]
+            "dependencies": [
+                "A"
+            ],
+            "spec": {
+                "image": "poseidon/worker/dummy:latest"
+            }
         }
     ],
     "args": {

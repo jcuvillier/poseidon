@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/mitchellh/mapstructure"
+
 	"poseidon/pkg/api"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/broker/events"
@@ -15,6 +17,11 @@ import (
 
 	"github.com/pkg/errors"
 )
+
+type TritonSpec struct {
+	workload.WorkloadSpec `mapstructure:",squash"`
+	ContinueOnFail        bool `json:"cof"`
+}
 
 type triton struct {
 	workload     workload.Workload
@@ -43,21 +50,26 @@ func New(ctx context.Context, broker broker.Broker, publishQName, receiveQName s
 	return t, nil
 }
 
-func (t *triton) Start(ctx context.Context, spec api.NodeSpec, params []interface{}) error {
-	ctx.Logger().Infof("starting node %s", spec.Name)
+func (t *triton) Start(ctx context.Context, spec interface{}, params []interface{}) error {
+	ctx.Logger().Infof("starting node %s", ctx.NodeName())
+	var s TritonSpec
+	if err := mapstructure.Decode(spec, &s); err != nil {
+		return errors.Wrap(err, "cannot decode triton executor spec")
+	}
+
 	// Create jobs
-	if err := t.store.CreateJobs(ctx, ctx.ProcessID(), spec.Name, params); err != nil {
-		return errors.Wrapf(err, "cannot create jobs for node %s", spec.Name)
+	if err := t.store.CreateJobs(ctx, ctx.ProcessID(), ctx.NodeName(), params); err != nil {
+		return errors.Wrapf(err, "cannot create jobs for node %s", ctx.NodeName())
 	}
 
 	// Create processing queue
 	if err := t.broker.CreateQueue(ctx, qname(ctx), t.publishQName); err != nil {
-		return errors.Wrapf(err, "cannot create processing queue %s for node %s", qname(ctx), spec.Name)
+		return errors.Wrapf(err, "cannot create processing queue %s for node %s", qname(ctx), ctx.NodeName())
 	}
 
 	//Schedule workload
-	if err := t.workload.Schedule(ctx, spec, len(params)); err != nil {
-		return errors.Wrapf(err, "cannot schedule workload for node %s", spec.Name)
+	if err := t.workload.Schedule(ctx, s.WorkloadSpec, len(params)); err != nil {
+		return errors.Wrapf(err, "cannot schedule workload for node %s", ctx.NodeName())
 	}
 
 	// Send work order as events
@@ -67,16 +79,16 @@ func (t *triton) Start(ctx context.Context, spec api.NodeSpec, params []interfac
 			Type:          events.TypeSubmit,
 			ProcessID:     ctx.ProcessID(),
 			JobID:         jobID,
-			NodeName:      spec.Name,
+			NodeName:      ctx.NodeName(),
 			Data:          p,
 			CorrelationID: ctx.CorrelationID(),
 			ExecutionID:   "abc",
 		}
 		if err := t.broker.Publish(ctx, evt, t.publishQName, ctx.ProcessID()); err != nil {
-			return errors.Wrapf(err, "cannot publish %s event for node %s and jobID %s", string(events.TypeSubmit), spec.Name, jobID)
+			return errors.Wrapf(err, "cannot publish %s event for node %s and jobID %s", string(events.TypeSubmit), ctx.NodeName(), jobID)
 		}
 	}
-	t.store.SetNodeStatus(ctx, ctx.ProcessID(), spec.Name, api.StatusSubmitted)
+	t.store.SetNodeStatus(ctx, ctx.ProcessID(), ctx.NodeName(), api.StatusSubmitted)
 	return nil
 }
 

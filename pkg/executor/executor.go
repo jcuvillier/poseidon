@@ -18,7 +18,7 @@ type NodeFinished struct {
 
 // Executor is the mechanism used to run nodes.
 type Executor interface {
-	Start(ctx context.Context, spec api.NodeSpec, params []interface{}) error
+	Start(ctx context.Context, spec interface{}, params []interface{}) error
 	Stop(ctx context.Context, pid, nodename string, status api.Status, gracefully bool) error
 	SetCallbackChan(chan NodeFinished)
 }

@@ -6,11 +6,12 @@ import (
 	"os"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/client"
-	"poseidon/pkg/util/context"
+	"poseidon/pkg/executor"
 	"poseidon/pkg/executor/triton"
 	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/scheduler"
 	"poseidon/pkg/store"
+	"poseidon/pkg/util/context"
 
 	"github.com/labstack/echo/v4"
 	"github.com/neko-neko/echo-logrus/v2/log"
@@ -91,7 +92,9 @@ func NewScheduler(ctx context.Context, s store.Store) (scheduler.Scheduler, erro
 		return nil, err
 	}
 
-	sc, err := scheduler.NewScheduler(exec, s)
+	sc, err := scheduler.NewScheduler(map[string]executor.Executor{
+		"triton": exec,
+	}, s)
 	if err != nil {
 		log.Fatal(err)
 	}
