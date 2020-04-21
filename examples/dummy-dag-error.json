@@ -1,0 +1,64 @@
+{
+    "name": "foo",
+    "nodes": [
+        {
+            "kind": "triton",
+            "name": "A",
+            "input": "@args",
+            "spec": {
+                "image": "poseidon/worker/dummy:latest"
+            }
+        },
+        {
+            "kind": "triton",
+            "name": "B",
+            "input": "#A",
+            "dependencies": ["A"],
+            "spec": {
+                "image": "poseidon/worker/dummy:latest"
+            }
+        },
+        {
+            "kind": "triton",
+            "name": "C",
+            "input": {
+                "delay": "20s",
+                "payload": "DONE"
+            },
+            "dependencies": ["A"],
+            "spec": {
+                "image": "poseidon/worker/dummy:latest"
+            }
+        },
+        {
+            "kind": "triton",
+            "name": "D",
+            "input": {
+                "delay": "10s",
+                "payload": "DONE"
+            },
+            "dependencies": ["B", "C"],
+            "spec": {
+                "image": "poseidon/worker/dummy:latest"
+            }
+        }
+    ],
+    "args": {
+        "delay": "5s",
+        "payload": [
+            {
+                "delay": "10s",
+                "payload": "YOUHOU1"
+            },
+            {
+                "delay": "5s",
+                "payload": "YOUHOU2",
+                "error": true
+            },
+            {
+                "delay": "8s",
+                "payload": "YOUHOU3"
+            }
+        ]
+    }
+}
