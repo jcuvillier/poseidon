@@ -65,6 +65,11 @@ func PrintPipeline(w io.Writer, pipeline api.PipelineState, pid string, opts Pri
 		}
 	}
 	sort.Slice(nodes, func(i, j int) bool {
+		if nodes[i].StartTime == nil {
+			return false
+		} else if nodes[j].StartTime == nil {
+			return true
+		}
 		return nodes[i].StartTime.Before(*nodes[j].StartTime)
 	})
 
