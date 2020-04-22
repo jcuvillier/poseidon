@@ -5,8 +5,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/mitchellh/mapstructure"
-
 	"poseidon/pkg/api"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/broker/events"
@@ -14,6 +12,7 @@ import (
 	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/store"
 	"poseidon/pkg/util/context"
+	"poseidon/pkg/util/maps"
 
 	"github.com/pkg/errors"
 )
@@ -53,7 +52,7 @@ func New(ctx context.Context, broker broker.Broker, publishQName, receiveQName s
 func (t *triton) Start(ctx context.Context, spec interface{}, params []interface{}) error {
 	ctx.Logger().Infof("starting node %s", ctx.NodeName())
 	var s TritonSpec
-	if err := mapstructure.Decode(spec, &s); err != nil {
+	if err := maps.Decode(spec, &s); err != nil {
 		return errors.Wrap(err, "cannot decode triton executor spec")
 	}
 

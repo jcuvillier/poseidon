@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
+	"poseidon/pkg/util/maps"
 
 	"github.com/caarlos0/env/v6"
 	"github.com/mitchellh/mapstructure"
@@ -48,19 +48,7 @@ func ReadConfig(in io.Reader) error {
 
 // Get returns the value for the given key
 func Get(key string) interface{} {
-	var obj interface{} = config
-	var val interface{} = nil
-
-	parts := strings.Split(key, ".")
-	for _, p := range parts {
-		if v, ok := obj.(map[string]interface{}); ok {
-			obj = v[p]
-			val = obj
-		} else {
-			return nil
-		}
-	}
-	return val
+	return maps.Get(config, key)
 }
 
 // Unmarshal parses the config data for the given key and stores the result in the value pointed to by v.
