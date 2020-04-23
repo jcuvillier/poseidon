@@ -1,17 +1,33 @@
 package api
 
 import (
+	"regexp"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
 	// InputPipelineArgs is keyword used for refering to input pipeline arguments
 	InputPipelineArgs = "args"
 
-	inputDepPrefix      = "@"
+	inputDepPrefix      = "$"
 	inputBatchDepPrefix = "#"
 	inputDepPathSep     = ":"
 )
+
+var (
+	// InputDepRegexp is compiled regexp for dependency in input structure
+	InputDepRegexp *regexp.Regexp
+)
+
+func init() {
+	r, err := regexp.Compile("([\\#|\\$]\\{[^}]+\\})")
+	if err != nil {
+		panic(errors.Wrap(err, "cannot compile node dependency regexp"))
+	}
+	InputDepRegexp = r
+}
 
 // PipelineSpec is the specification of a Pipeline.
 type PipelineSpec struct {
@@ -32,39 +48,56 @@ type NodeSpec struct {
 
 // InputDependency is a structure representing a input dependency
 type InputDependency struct {
-	Name    string
-	Path    string
-	IsBatch bool
+	OriginalString string
+	Name           string
+	Path           string
+	IsBatch        bool
 }
 
-// AsInputDependency returns the given string as an InputDependency instance
-func AsInputDependency(in string) (InputDependency, bool) {
+// InputDependencies extracts the dependencies from the string
+func InputDependencies(in string) []InputDependency {
+	var deps []InputDependency
+	strDeps := InputDepRegexp.FindAllString(in, -1)
+	for _, str := range strDeps {
+		dep := AsInputDependency(str)
+		if dep.Name != "" {
+			deps = append(deps, dep)
+		}
+	}
+	return deps
+}
+
+// AsInputDependency create a InputDependency struct from a string.
+// This function should be called
+func AsInputDependency(in string) InputDependency {
 	var str string
 	batch := false
 	if strings.HasPrefix(in, inputDepPrefix) {
-		str = in[len(inputDepPrefix):]
+		str = in[len(inputDepPrefix)+1 : len(in)-1]
 	} else if strings.HasPrefix(in, inputBatchDepPrefix) {
-		str = in[len(inputBatchDepPrefix):]
+		str = in[len(inputBatchDepPrefix)+1 : len(in)-1]
 		batch = true
 	} else {
-		return InputDependency{}, false
+		return InputDependency{}
 	}
 	i := strings.Index(str, inputDepPathSep)
 	if i == -1 {
 		return InputDependency{
-			Name:    str,
-			IsBatch: batch,
-		}, true
+			OriginalString: in,
+			Name:           str,
+			IsBatch:        batch,
+		}
 	}
 	return InputDependency{
-		Name:    str[:i],
-		Path:    str[i+1:],
-		IsBatch: batch,
-	}, true
+		OriginalString: in,
+		Name:           str[:i],
+		Path:           str[i+1:],
+		IsBatch:        batch,
+	}
 }
 
-// InputDependencies returns the node dependencies.
-func (n NodeSpec) InputDependencies() []InputDependency {
+// GetInputDependencies returns the node dependencies extracted in the inputs
+func (n NodeSpec) GetInputDependencies() []InputDependency {
 	var deps []InputDependency
 	dep(&deps, n.Input)
 	return deps
@@ -78,9 +111,8 @@ func dep(res *[]InputDependency, i interface{}) {
 		}
 	}
 	if asString, isString := i.(string); isString {
-		if d, isDep := AsInputDependency(asString); isDep {
-			*res = append(*res, d)
-		}
+		deps := InputDependencies(asString)
+		*res = append(*res, deps...)
 	}
 	return
 }
