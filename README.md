@@ -1,3 +1,5 @@
+![https://github.com/jcuvillier/poseidon/actions?query=workflow%3AGo](https://github.com/jcuvillier/poseidon/workflows/Go/badge.svg)
+
 # ![Poseidon](docs/assets/poseidon.png)
 
 ## What is Poseidon ?
