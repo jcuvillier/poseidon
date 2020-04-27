@@ -4,7 +4,7 @@
         {
             "kind": "triton",
             "name": "A",
-            "input": "@args",
+            "input": "@{args}",
             "spec": {
                 "image": "poseidon/worker/dummy:latest"
             }
@@ -12,7 +12,7 @@
         {
             "kind": "triton",
             "name": "B",
-            "input": "#A",
+            "input": "#{A}",
             "dependencies": ["A"],
             "spec": {
                 "image": "poseidon/worker/dummy:latest"

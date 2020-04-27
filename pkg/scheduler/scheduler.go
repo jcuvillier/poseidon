@@ -5,7 +5,8 @@ import (
 	"poseidon/pkg/executor"
 	"poseidon/pkg/store"
 	"poseidon/pkg/util/context"
-	"reflect"
+	"poseidon/pkg/util/template"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -272,74 +273,23 @@ func (sc *scheduler) nodeParameters(ctx context.Context, node api.NodeSpec, args
 	// Map containing node results
 	nodeResults := make(map[string]interface{})
 	nodeResults[api.InputPipelineArgs] = args
-	var batchNodes []string //contains nodes that are declared batch
-	deps := node.InputDependencies()
-	if len(deps) == 0 {
-		// No input dependencies
-		return []interface{}{node.Input}, nil
-	}
-
-	// Iterate over input dependencies in order to retrieve nodes' results
-	// Also identify batch nodes
-	for _, d := range deps {
-		if d.Name != api.InputPipelineArgs {
-			r, err := sc.s.NodeResult(ctx, ctx.ProcessID(), d.Name)
+	tpl := template.New(node.Input)
+	for _, expr := range tpl.FindAll() {
+		nodename := strings.Split(expr.Text, ".")[0]
+		if nodename != api.InputPipelineArgs {
+			r, err := sc.s.NodeResult(ctx, ctx.ProcessID(), nodename)
 			if err != nil {
-				return nil, errors.Wrapf(err, "cannot get result for node %s", d.Name)
+				return nil, errors.Wrapf(err, "cannot get result for node %s", nodename)
 			}
-			nodeResults[d.Name] = r
-		}
-		if d.IsBatch {
-			batchNodes = append(batchNodes, d.Name)
+			nodeResults[nodename] = r
 		}
 	}
-
-	batchSize := 1
-	if len(batchNodes) != 0 {
-		if len(batchNodes) > 1 { // Remove this when multiple batch nodes is implemented
-			return nil, errors.New("only one batch node is permitted, multiple batch nodes not yet implemented")
-		}
-		//TODO: implement multiple batch nodes, Check all batch nodes are arrays with the same result size
-		asArray, isArray := nodeResults[batchNodes[0]].([]interface{})
-		if !isArray {
-			return nil, errors.Errorf("node %s is flagged as batch but is not an array", batchNodes[0])
-		}
-		batchSize = len(asArray)
+	resolved, err := tpl.Resolve(template.ResolveWithMap(nodeResults))
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot compute parameter for node %s", node.Name)
 	}
-
-	parameters := make([]interface{}, batchSize)
-	for i := 0; i < batchSize; i++ {
-		p := param(ctx, i, node.Input, nodeResults)
-		parameters[i] = p
+	if asArray, isArray := resolved.([]interface{}); isArray {
+		return asArray, nil
 	}
-	return parameters, nil
-}
-
-func param(ctx context.Context, index int, input interface{}, nodeResults map[string]interface{}) interface{} {
-	switch reflect.TypeOf(input).Kind() {
-	case reflect.String:
-		//TODO: consider dependency part of the string instead of the whole string
-		if asDep, isDep := api.AsInputDependency(input.(string)); isDep {
-			if asDep.IsBatch {
-				return nodeResults[asDep.Name].([]interface{})[index] //Checks done previously
-			}
-			return nodeResults[asDep.Name]
-		}
-	case reflect.Map:
-		// Map is map[string]interface{}
-		m := input.(map[string]interface{})
-		for k, v := range m {
-			newVal := param(ctx, index, v, nodeResults)
-			m[k] = newVal
-		}
-	case reflect.Array, reflect.Slice:
-		var a []interface{}
-		for _, i := range input.([]interface{}) {
-			newVal := param(ctx, index, i, nodeResults)
-			a = append(a, newVal)
-		}
-	default:
-		return input
-	}
-	return input
+	return []interface{}{resolved}, nil
 }

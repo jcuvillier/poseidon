@@ -17,7 +17,7 @@ This is not ordered by priority...
 - [ ] Conditional nodes
 - [ ] Pipeline in pipeline (aka pip)
 - [ ] TTL
-- [ ] Enhance Node's input syntax to support multiple batch and dependency string in other string
+- [x] Enhance Node's input syntax to support multiple batch and dependency string in other string
 - [x] Add time info in store
 - [ ] Plug a tracing library
 - [ ] Log management
