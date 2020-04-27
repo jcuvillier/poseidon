@@ -5,6 +5,8 @@ import (
 	"poseidon/pkg/executor"
 	"poseidon/pkg/store"
 	"poseidon/pkg/util/context"
+	"poseidon/pkg/util/template"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -265,4 +267,29 @@ func nodeDepsCompleted(ctx context.Context, node api.NodeSpec, statuses map[stri
 		}
 	}
 	return true
+}
+
+func (sc *scheduler) nodeParameters(ctx context.Context, node api.NodeSpec, args interface{}) ([]interface{}, error) {
+	// Map containing node results
+	nodeResults := make(map[string]interface{})
+	nodeResults[api.InputPipelineArgs] = args
+	tpl := template.New(node.Input)
+	for _, expr := range tpl.FindAll() {
+		nodename := strings.Split(expr.Text, ".")[0]
+		if nodename != api.InputPipelineArgs {
+			r, err := sc.s.NodeResult(ctx, ctx.ProcessID(), nodename)
+			if err != nil {
+				return nil, errors.Wrapf(err, "cannot get result for node %s", nodename)
+			}
+			nodeResults[nodename] = r
+		}
+	}
+	resolved, err := tpl.Resolve(template.ResolveWithMap(nodeResults))
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot compute parameter for node %s", node.Name)
+	}
+	if asArray, isArray := resolved.([]interface{}); isArray {
+		return asArray, nil
+	}
+	return []interface{}{resolved}, nil
 }

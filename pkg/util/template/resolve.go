@@ -2,6 +2,7 @@ package template
 
 import (
 	"fmt"
+	"poseidon/pkg/util/maps"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -9,6 +10,17 @@ import (
 
 //ResolveFunc specifies how a template should be resolved
 type ResolveFunc func(expr Expression) (interface{}, error)
+
+// ResolveWithMap returns a ResolveFunc that performs resolution from a map
+func ResolveWithMap(m map[string]interface{}) ResolveFunc {
+	return func(expr Expression) (interface{}, error) {
+		res := maps.Get(m, expr.Text)
+		if res == nil {
+			return nil, errors.Errorf("expression %s resolved to nil interface", expr)
+		}
+		return res, nil
+	}
+}
 
 // Resolve resolves template using the given resolver
 func (tpl *Template) Resolve(resolver ResolveFunc) (interface{}, error) {

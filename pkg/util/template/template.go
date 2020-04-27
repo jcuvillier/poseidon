@@ -31,6 +31,13 @@ type Template struct {
 	input interface{}
 }
 
+// New returns a new Template from the given structure
+func New(in interface{}) *Template {
+	return &Template{
+		input: in,
+	}
+}
+
 // Expression is a a template element to be resolved
 type Expression struct {
 	Text    string
