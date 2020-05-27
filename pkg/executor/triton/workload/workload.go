@@ -25,12 +25,12 @@ type ResourcesSpec struct {
 // Workload defines how the workload is scheduled and deleted.
 type Workload interface {
 
-	// Schedule schedules the workload to handle the given node.
+	// Schedule schedules the workload to handle the given task.
 	// n is the expected parallelism. May be replaced with the max value defined for the scheduler
 	Schedule(ctx context.Context, spec WorkloadSpec, n int) error
 
-	// Delete deletes the workload for the given node.
-	Delete(ctx context.Context, nodename string) error
+	// Delete deletes the workload for the given task.
+	Delete(ctx context.Context, taskID string) error
 }
 
 func parallelism(n, specParallelism int) int {

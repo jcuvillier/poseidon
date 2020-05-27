@@ -10,10 +10,10 @@ import (
 
 const (
 	// ProcessIDParam is the param definition for ProcessID
-	ProcessIDParam = "pid"
+	ProcessIDParam = "processID"
 
-	// NodenameParam is the param definition for Nodename
-	NodenameParam = "nodename"
+	// TaskIDParam is the param definition for Nodename
+	TaskIDParam = "taskID"
 )
 
 // Client is the API client that performs all operations to a poseidon server
@@ -23,10 +23,10 @@ type Client interface {
 	Submit(ctx context.Context, spec api.PipelineSpec, args interface{}) (string, error)
 
 	// PipelineState returns the state of a pipeline.
-	PipelineState(ctx context.Context, pid string) (PipelineStateResponse, error)
+	PipelineState(ctx context.Context, processID string) (PipelineStateResponse, error)
 
-	// NodeState returns the state of a node.
-	NodeState(ctx context.Context, pid, nodename string) (NodeStateResponse, error)
+	// TaskState returns the state of a task.
+	TaskState(ctx context.Context, processID, taskID string) (TaskStateResponse, error)
 }
 
 // NewClient creates a Poseidon client

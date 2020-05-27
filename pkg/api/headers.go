@@ -3,8 +3,8 @@ package api
 const (
 	// HeaderProcessID is header for ProcessID
 	HeaderProcessID = "x-process-id"
-	// HeaderNodename is header for NodeName
-	HeaderNodename = "x-node-name"
+	// HeaderTaskID is header for TaskID
+	HeaderTaskID = "x-task-id"
 	// HeaderJobID is header for JobID
 	HeaderJobID = "x-job-id"
 	// HeaderType is header for Type

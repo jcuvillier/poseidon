@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"poseidon/pkg/api"
-	"poseidon/pkg/util/context"
 	"poseidon/pkg/broker/events"
 	"poseidon/pkg/store"
+	"poseidon/pkg/util/context"
 
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
@@ -72,7 +72,7 @@ func (q *rabbitmq) Publish(ctx context.Context, evt events.Event, qname, routing
 	//Headers
 	headers := amqp.Table{
 		api.HeaderProcessID:     evt.ProcessID,
-		api.HeaderNodename:      evt.NodeName,
+		api.HeaderTaskID:        evt.TaskID,
 		api.HeaderJobID:         evt.JobID,
 		api.HeaderCorrelationID: evt.CorrelationID,
 		api.HeaderType:          string(evt.Type),
@@ -122,7 +122,7 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 		case "application/json":
 			if err := json.Unmarshal(d.Body, &data); err != nil {
 				d.Reject(false)
-				return errors.Wrapf(err, "cannot unmarshal received event %s for job %s of node %s, droping event", d.Headers[api.HeaderType], d.Headers[api.HeaderJobID], d.Headers[api.HeaderNodename])
+				return errors.Wrapf(err, "cannot unmarshal received event %s for job %s of task %s, droping event", d.Headers[api.HeaderType], d.Headers[api.HeaderJobID], d.Headers[api.HeaderTaskID])
 			}
 		default:
 			ctx.Logger().Warnf("received event with unsupported content-type %s, dropping event", d.ContentType)
@@ -137,7 +137,7 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 			Type:          events.EventType(d.Headers[api.HeaderType].(string)),
 			CorrelationID: correlationID,
 			ProcessID:     pid,
-			NodeName:      d.Headers[api.HeaderNodename].(string),
+			TaskID:        d.Headers[api.HeaderTaskID].(string),
 			JobID:         d.Headers[api.HeaderJobID].(string),
 			Data:          data,
 		}
@@ -146,7 +146,7 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 		ctx := context.Background()
 		ctx = context.WithProcessID(ctx, pid)
 		ctx = context.WithCorrelationID(ctx, correlationID)
-		ctx = context.WithNodeName(ctx, evt.NodeName)
+		ctx = context.WithTaskID(ctx, evt.TaskID)
 		ctx = context.WithJobID(ctx, evt.JobID)
 
 		//Apply options
@@ -161,7 +161,7 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 
 		if err := f(ctx, evt); err != nil {
 			// TODO: Implement reject or nack policy depending on error
-			ctx.Logger().Errorf("cannot handle event %s for job %s of node %s, %s", evt.Type, evt.JobID, evt.NodeName, err)
+			ctx.Logger().Errorf("cannot handle event %s, %s", evt, err)
 			if errors.As(err, &store.ErrNotFound{}) {
 				reject(ctx, evt, &d)
 			} else {
@@ -177,26 +177,26 @@ func (q *rabbitmq) Receive(ctx context.Context, f HandleFunc, ferr ErrorHandler,
 // ack acknowledge the event and log error if the acknowledgment returns an error.
 func ack(ctx context.Context, evt events.Event, d *amqp.Delivery) {
 	if err := d.Ack(false); err != nil {
-		ctx.Logger().Errorf("cannot ack event %s for job %s of node %s, %s", evt.Type, evt.JobID, evt.NodeName, err)
+		ctx.Logger().Errorf("cannot ack event %s, %s", evt, err)
 	}
 }
 
 // nack negatively acknowledge the event, requeueing it, and log error if the acknowledgment returns an error.
 func nack(ctx context.Context, evt events.Event, d *amqp.Delivery) {
 	if err := d.Nack(false, true); err != nil {
-		ctx.Logger().Errorf("cannot ack event %s for job %s of node %s, %s", evt.Type, evt.JobID, evt.NodeName, err)
+		ctx.Logger().Errorf("cannot ack event %s, %s", evt, err)
 	}
 }
 
 // nack negatively acknowledge the event and log error if the acknowledgment returns an error.
 func reject(ctx context.Context, evt events.Event, d *amqp.Delivery) {
 	if err := d.Reject(false); err != nil {
-		ctx.Logger().Errorf("cannot ack event %s for job %s of node %s, %s", evt.Type, evt.JobID, evt.NodeName, err)
+		ctx.Logger().Errorf("cannot ack event %s , %s", evt, err)
 	}
 }
 
 func (q *rabbitmq) CreateQueue(ctx context.Context, name, bindTo string) error {
-	ctx.Logger().Tracef("creating queue %s with routing headers %s=%s and %s=%s", name, api.HeaderProcessID, ctx.ProcessID(), api.HeaderNodename, ctx.NodeName())
+	ctx.Logger().Tracef("creating queue %s with routing headers %s=%s and %s=%s", name, api.HeaderProcessID, ctx.ProcessID(), api.HeaderTaskID, ctx.TaskID())
 	_, err := q.ch.QueueDeclare(
 		name,  // name
 		true,  // durable
@@ -217,11 +217,11 @@ func (q *rabbitmq) CreateQueue(ctx context.Context, name, bindTo string) error {
 		amqp.Table{
 			"x-match":           "all", //x-match = all means all headers must match for the routing,
 			api.HeaderProcessID: ctx.ProcessID(),
-			api.HeaderNodename:  ctx.NodeName(),
+			api.HeaderTaskID:    ctx.TaskID(),
 		},
 	)
 	if err != nil {
-		return errors.Wrapf(err, "cannot bind queue %s to exchange %s with routing headers %s=%s and %s=%s", name, bindTo, api.HeaderProcessID, ctx.ProcessID(), api.HeaderNodename, ctx.NodeName())
+		return errors.Wrapf(err, "cannot bind queue %s to exchange %s with routing headers %s=%s and %s=%s", name, bindTo, api.HeaderProcessID, ctx.ProcessID(), api.HeaderTaskID, ctx.TaskID())
 	}
 	return nil
 }

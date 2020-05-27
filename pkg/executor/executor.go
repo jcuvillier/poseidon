@@ -5,20 +5,20 @@ import (
 	"poseidon/pkg/util/context"
 )
 
-// CallbackFunc is the function called when the node is done (either successfully or with error)
-type CallbackFunc func(ctx context.Context, nodename string, s api.Status) error
+// CallbackFunc is the function called when a job is finished
+type CallbackFunc func(ctx context.Context, payload interface{}, s api.Status) error
 
-// NodeFinished is the object returned into the callback chan when a node is finished
-type NodeFinished struct {
-	CorrelationID string
-	ProcessID     string
-	Nodename      string
-	Status        api.Status
-}
-
-// Executor is the mechanism used to run nodes.
+// Executor is the mechanism used to run jobs
 type Executor interface {
-	Start(ctx context.Context, spec interface{}, params []interface{}) error
-	Stop(ctx context.Context, pid, nodename string, status api.Status, gracefully bool) error
-	SetCallbackChan(chan NodeFinished)
+	// Start informs the executor a task is started with n jobs.
+	Start(ctx context.Context, spec interface{}, n int) error
+
+	// Stop stops the execution of a task
+	Stop(ctx context.Context, graceful bool) error
+
+	// SubmitJob submits a job
+	SubmitJob(ctx context.Context, jobID string, param interface{}) error
+
+	// SetCallbackFunc sets the function to be called when a job is done
+	SetCallbackFunc(f CallbackFunc)
 }

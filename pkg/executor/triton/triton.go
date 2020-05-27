@@ -3,14 +3,12 @@ package triton
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	"poseidon/pkg/api"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/broker/events"
 	"poseidon/pkg/executor"
 	"poseidon/pkg/executor/triton/workload"
-	"poseidon/pkg/store"
 	"poseidon/pkg/util/context"
 	"poseidon/pkg/util/maps"
 
@@ -24,19 +22,17 @@ type TritonSpec struct {
 
 type triton struct {
 	workload     workload.Workload
-	store        store.ExecutorStore
-	callback     chan executor.NodeFinished
 	broker       broker.Broker
 	publishQName string
+	callback     executor.CallbackFunc
 }
 
 // New returns a new triton executor with the given components
-func New(ctx context.Context, broker broker.Broker, publishQName, receiveQName string, store store.ExecutorStore, workload workload.Workload) (executor.Executor, error) {
+func New(ctx context.Context, broker broker.Broker, publishQName, receiveQName string, workload workload.Workload) (executor.Executor, error) {
 
 	t := &triton{
 		broker:       broker,
 		publishQName: publishQName,
-		store:        store,
 		workload:     workload,
 	}
 	go func() {
@@ -49,16 +45,11 @@ func New(ctx context.Context, broker broker.Broker, publishQName, receiveQName s
 	return t, nil
 }
 
-func (t *triton) Start(ctx context.Context, spec interface{}, params []interface{}) error {
+func (t *triton) Start(ctx context.Context, spec interface{}, n int) error {
 	ctx.Logger().Infof("starting node %s", ctx.NodeName())
 	var s TritonSpec
 	if err := maps.Decode(spec, &s); err != nil {
 		return errors.Wrap(err, "cannot decode triton executor spec")
-	}
-
-	// Create jobs
-	if err := t.store.CreateJobs(ctx, ctx.ProcessID(), ctx.NodeName(), params); err != nil {
-		return errors.Wrapf(err, "cannot create jobs for node %s", ctx.NodeName())
 	}
 
 	// Create processing queue
@@ -67,62 +58,47 @@ func (t *triton) Start(ctx context.Context, spec interface{}, params []interface
 	}
 
 	//Schedule workload
-	if err := t.workload.Schedule(ctx, s.WorkloadSpec, len(params)); err != nil {
+	if err := t.workload.Schedule(ctx, s.WorkloadSpec, n); err != nil {
 		return errors.Wrapf(err, "cannot schedule workload for node %s", ctx.NodeName())
 	}
-
-	// Send work order as events
-	for i, p := range params {
-		jobID := strconv.Itoa(i)
-		evt := events.Event{
-			Type:          events.TypeSubmit,
-			ProcessID:     ctx.ProcessID(),
-			JobID:         jobID,
-			NodeName:      ctx.NodeName(),
-			Data:          p,
-			CorrelationID: ctx.CorrelationID(),
-			ExecutionID:   "abc",
-		}
-		if err := t.broker.Publish(ctx, evt, t.publishQName, ctx.ProcessID()); err != nil {
-			return errors.Wrapf(err, "cannot publish %s event for node %s and jobID %s", string(events.TypeSubmit), ctx.NodeName(), jobID)
-		}
-	}
-	t.store.SetNodeStatus(ctx, ctx.ProcessID(), ctx.NodeName(), api.StatusSubmitted)
 	return nil
 }
 
-func (t *triton) Stop(ctx context.Context, pid, nodename string, status api.Status, gracefully bool) error {
+func (t *triton) SubmitJob(ctx context.Context, jobID string, param interface{}) error {
+	evt := events.Event{
+		Type:          events.TypeSubmit,
+		ProcessID:     ctx.ProcessID(),
+		JobID:         jobID,
+		TaskID:        ctx.TaskID(),
+		Data:          param,
+		CorrelationID: ctx.CorrelationID(),
+	}
+	if err := t.broker.Publish(ctx, evt, t.publishQName, ctx.ProcessID()); err != nil {
+		return errors.Wrapf(err, "cannot publish %s event for node %s and jobID %s", string(events.TypeSubmit), ctx.NodeName(), jobID)
+	}
+	return nil
+}
+
+func (t *triton) Stop(ctx context.Context, gracefully bool) error {
 	if gracefully {
 		return errors.New("graceful stop not yet implemented")
 	}
 
-	// Stop jobs in store
-	if err := t.store.StopJobs(ctx, pid, nodename, status); err != nil {
-		return errors.Wrapf(err, "cannot stop jobs for node %s", nodename)
-	}
-
 	//Delete the process queue
 	if err := t.broker.DeleteQueue(ctx, qname(ctx)); err != nil {
-		return errors.Wrapf(err, "cannot delete running jobs for node %s", nodename)
+		return errors.Wrap(err, "cannot delete running jobs")
 	}
 
 	// Delete the workload
-	if err := t.workload.Delete(ctx, nodename); err != nil {
-		return errors.Wrapf(err, "cannot stop workload for node %s", nodename)
+	if err := t.workload.Delete(ctx, ctx.TaskID()); err != nil {
+		return errors.Wrap(err, "cannot stop workload")
 	}
 
-	if err := t.store.SetNodeStatus(ctx, pid, nodename, status); err != nil {
-		return errors.Wrapf(err, "cannot set status %s to node %s", status, nodename)
-	}
 	return nil
 }
 
-func (t *triton) SetCallbackChan(c chan executor.NodeFinished) {
-	t.callback = c
-}
-
 func (t *triton) handleEvent(ctx context.Context, evt events.Event) error {
-	ctx.Logger().Tracef("receiving %s event for node %s and job %s", evt.Type, evt.NodeName, evt.JobID)
+	ctx.Logger().Tracef("receiving %s event for task %s and job %s", evt.Type, evt.TaskID, evt.JobID)
 	var status api.Status
 	var payload interface{}
 	switch evt.Type {
@@ -140,75 +116,14 @@ func (t *triton) handleEvent(ctx context.Context, evt events.Event) error {
 		return nil
 	}
 
-	js, err := t.store.GetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID)
-	if err != nil {
-		return errors.Wrapf(err, "cannot get status for job %s of node %s", evt.JobID, evt.NodeName)
-	}
-	if js.Finished() { //Job already has a finished status, skip event
-		ctx.Logger().Tracef("job already in status %s, ignoring event", js)
-		return nil
-	}
-
-	if err := t.store.SetJobStatus(ctx, evt.ProcessID, evt.NodeName, evt.JobID, status, evt.Time, payload); err != nil {
-		return errors.Wrapf(err, "cannot set status %s for job %s of node %s", status, evt.JobID, evt.NodeName)
-	}
-	if status == api.StatusRunning {
-		// Set Node Running if not already running
-		if err := t.store.SetNodeRunning(ctx, ctx.ProcessID(), evt.NodeName); err != nil {
-			return errors.Wrapf(err, "cannot set status %s for node %s", status, evt.NodeName)
-		}
-	} else if status.Finished() { // If status is final, check if the node is finished as well
-		s, err := t.computeNodeStatus(ctx, ctx.ProcessID(), evt.NodeName)
-		if err != nil {
-			return errors.Wrap(err, "cannot compute node status")
-		}
-
-		if s.Finished() {
-			if err := t.Stop(ctx, ctx.ProcessID(), evt.NodeName, s, false); err != nil {
-				return err
-			}
-
-			if t.callback != nil {
-				t.callback <- executor.NodeFinished{
-					CorrelationID: evt.CorrelationID,
-					ProcessID:     evt.ProcessID,
-					Nodename:      evt.NodeName,
-					Status:        status,
-				}
-			}
-		}
+	if err := t.callback(ctx, payload, status); err != nil {
+		return errors.Wrapf(err, "cannot call callback func for job %s for task %s", ctx.JobID(), ctx.TaskID())
 	}
 	return nil
 }
 
-// computeNodeStatus computes a node status from the its job statuses
-func (t *triton) computeNodeStatus(ctx context.Context, pid, nodename string) (api.Status, error) {
-	statuses, err := t.store.GetJobsStatuses(ctx, pid, nodename)
-	if err != nil {
-		return "", errors.Wrapf(err, "cannot get status for jobs of node %s", nodename)
-	}
-	spec, err := t.store.GetNodeSpec(ctx, pid, nodename)
-	if err != nil {
-		return "", errors.Wrapf(err, "cannot get specification of node %s", nodename)
-	}
-	hasError := false
-	hasNotFinished := false
-	for _, s := range statuses {
-		switch s {
-		case api.StatusFailed:
-			hasError = true
-		case api.StatusCreated, api.StatusSubmitted, api.StatusRunning:
-			hasNotFinished = true
-		}
-	}
-
-	if hasError && !spec.ContinueOnFail {
-		return api.StatusFailed, nil
-	}
-	if hasNotFinished {
-		return api.StatusRunning, nil
-	}
-	return api.StatusCompleted, nil
+func (t *triton) SetCallbackFunc(f executor.CallbackFunc) {
+	t.callback = f
 }
 
 // qname compute a name for the queue for the node execution.

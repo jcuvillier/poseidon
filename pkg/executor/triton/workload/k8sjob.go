@@ -78,7 +78,7 @@ func NewK8SJobWorkload(config K8SJobWorkloadConfig) (Workload, error) {
 
 func (k k8sJob) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 	var p int32 = int32(parallelism(n, spec.MaxWorker))
-	ctx.Logger().Tracef("scheduling workload for node %s with parallelism at %d", ctx.NodeName(), p)
+	ctx.Logger().Tracef("scheduling workload for task %s with parallelism at %d", ctx.NodeName(), p)
 	jobClient := k.clientset.BatchV1().Jobs(k.config.Namespace)
 
 	// Env
@@ -88,7 +88,7 @@ func (k k8sJob) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 			Value: ctx.ProcessID(),
 		},
 		apiv1.EnvVar{
-			Name:  worker.EnvNodeName,
+			Name:  worker.EnvTaskID,
 			Value: ctx.NodeName(),
 		},
 		apiv1.EnvVar{
@@ -104,7 +104,7 @@ func (k k8sJob) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 			Labels: map[string]string{
 				api.HeaderCorrelationID: ctx.CorrelationID(),
 				api.HeaderProcessID:     ctx.ProcessID(),
-				api.HeaderNodename:      ctx.NodeName(),
+				api.HeaderTaskID:        ctx.TaskID(),
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -145,8 +145,8 @@ func (k k8sJob) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 	return nil
 }
 
-func (k k8sJob) Delete(ctx context.Context, nodename string) error {
-	ctx.Logger().Tracef("deleting workload for node %s", nodename)
+func (k k8sJob) Delete(ctx context.Context, taskID string) error {
+	ctx.Logger().Tracef("deleting workload for task %s", taskID)
 	jobClient := k.clientset.BatchV1().Jobs(k.config.Namespace)
 	name := jobName(ctx)
 	propagationPolicy := metav1.DeletePropagationBackground

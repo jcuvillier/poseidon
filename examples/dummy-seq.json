@@ -1,6 +1,6 @@
 {
     "name": "foo",
-    "nodes": [
+    "tasks": [
         {
             "kind": "triton",
             "name": "A",

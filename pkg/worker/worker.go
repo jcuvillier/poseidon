@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"poseidon/pkg/broker"
-	"poseidon/pkg/util/context"
 	"poseidon/pkg/broker/events"
+	"poseidon/pkg/util/context"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +15,7 @@ import (
 
 const (
 	EnvProcessID    = "PROCESS_ID"
-	EnvNodeName     = "NODE_NAME"
+	EnvTaskID       = "TASK_ID"
 	EnvPublishQName = "PUBLISH_QUEUE"
 	envSandbox      = "SANDBOX"
 )
@@ -47,27 +47,27 @@ func start(ctx context.Context, f Func) error {
 	if processID == "" {
 		return errors.Errorf("missing env %s", EnvProcessID)
 	}
-	nodename := os.Getenv(EnvNodeName)
-	if nodename == "" {
-		return errors.Errorf("missing env %s", EnvNodeName)
+	taskID := os.Getenv(EnvTaskID)
+	if taskID == "" {
+		return errors.Errorf("missing env %s", EnvTaskID)
 	}
 	publishQName := os.Getenv(EnvPublishQName)
 	if publishQName == "" {
 		return errors.Errorf("missing env %s", EnvPublishQName)
 	}
 
-	ctx.Logger().Infof("starting worker for process %s and node %s", processID, nodename)
+	ctx.Logger().Infof("starting worker for process %s and task %s", processID, taskID)
 
 	q, err := broker.NewFromEnv(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "cannot create new broker")
 	}
 
-	return q.Receive(ctx, wrap(q, publishQName, f), nil, fmt.Sprintf("q_%s_%s", processID, nodename), filterEvent(nodename))
+	return q.Receive(ctx, wrap(q, publishQName, f), nil, fmt.Sprintf("q_%s_%s", processID, taskID), filterEvent(taskID))
 }
 
-// filterEvent rejects events with nodename different from the given one.
-func filterEvent(nodename string) broker.ReceiveOption {
+// filterEvent rejects events with taskID different from the given one.
+func filterEvent(taskID string) broker.ReceiveOption {
 	return func(ctx context.Context, evt *events.Event) error {
 		// Filter out non SUBMIT event
 		if evt.Type != events.TypeSubmit {
@@ -114,9 +114,8 @@ func newEvent(ctx context.Context, typ events.EventType, payload interface{}) ev
 	return events.Event{
 		Type:          typ,
 		CorrelationID: ctx.CorrelationID(),
-		ExecutionID:   "abc",
 		JobID:         ctx.JobID(),
-		NodeName:      ctx.NodeName(),
+		TaskID:        ctx.NodeName(),
 		ProcessID:     ctx.ProcessID(),
 		Data:          payload,
 		Time:          time.Now(),

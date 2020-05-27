@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"poseidon/pkg/api"
-	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -14,30 +13,68 @@ type pipeline struct {
 	spec       api.PipelineSpec
 	status     api.Status
 	args       interface{}
-	nodes      map[string]*node
+	tasks      map[string]*task
 	createTime *time.Time
 	startTime  *time.Time
 	endTime    *time.Time
 }
 
-type node struct {
-	name      string
-	status    api.Status
-	jobs      map[string]*job
-	startTime *time.Time
-	endTime   *time.Time
+func (p *pipeline) applyTimeOption(opt TimeOption) {
+	if !opt.CreateTime.IsZero() {
+		p.createTime = &opt.CreateTime
+	}
+	if !opt.StartTime.IsZero() {
+		p.startTime = &opt.StartTime
+	}
+	if !opt.EndTime.IsZero() {
+		p.endTime = &opt.EndTime
+	}
+}
+
+type task struct {
+	name       string
+	status     api.Status
+	jobs       map[string]*job
+	createTime *time.Time
+	startTime  *time.Time
+	endTime    *time.Time
+}
+
+func (t *task) applyTimeOption(opt TimeOption) {
+	if !opt.CreateTime.IsZero() {
+		t.createTime = &opt.CreateTime
+	}
+	if !opt.StartTime.IsZero() {
+		t.startTime = &opt.StartTime
+	}
+	if !opt.EndTime.IsZero() {
+		t.endTime = &opt.EndTime
+	}
 }
 
 type job struct {
 	processID   string
-	nodename    string
+	taskID      string
 	jobID       string
 	params      interface{}
 	status      api.Status
 	executionID string
 	result      interface{}
+	createTime  *time.Time
 	startTime   *time.Time
 	endTime     *time.Time
+}
+
+func (j *job) applyTimeOption(opt TimeOption) {
+	if !opt.CreateTime.IsZero() {
+		j.createTime = &opt.CreateTime
+	}
+	if !opt.StartTime.IsZero() {
+		j.startTime = &opt.StartTime
+	}
+	if !opt.EndTime.IsZero() {
+		j.endTime = &opt.EndTime
+	}
 }
 
 // NewInMemoryStore returns a new InMemory store
@@ -51,104 +88,101 @@ type inMemory struct {
 	pipelines map[string]*pipeline
 }
 
-func (s *inMemory) CreatePipeline(ctx context.Context, pid string, spec api.PipelineSpec, args interface{}) error {
+func (s *inMemory) CreatePipeline(ctx context.Context, processID string, spec api.PipelineSpec, args interface{}) error {
 	now := time.Now()
 	p := pipeline{
 		spec:       spec,
 		status:     api.StatusCreated,
 		args:       args,
-		nodes:      make(map[string]*node),
+		tasks:      make(map[string]*task),
 		createTime: &now,
 	}
-	s.pipelines[pid] = &p
+	s.pipelines[processID] = &p
 	return nil
 }
 
-func (s *inMemory) CreateNodes(ctx context.Context, pid string, names []string) error {
-	nodes := make(map[string]*node)
+func (s *inMemory) CreateTasks(ctx context.Context, processID string, names []string) error {
+	now := time.Now()
+	tasks := make(map[string]*task)
 	for _, n := range names {
-		nodes[n] = &node{
-			name:   n,
-			status: api.StatusCreated,
-			jobs:   make(map[string]*job),
+		tasks[n] = &task{
+			name:       n,
+			status:     api.StatusCreated,
+			jobs:       make(map[string]*job),
+			createTime: &now,
 		}
 	}
-	s.pipelines[pid].nodes = nodes
+	s.pipelines[processID].tasks = tasks
 	return nil
 }
 
-func (s *inMemory) GetPipelineSpec(ctx context.Context, pid string) (api.PipelineSpec, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetPipelineSpec(ctx context.Context, processID string) (api.PipelineSpec, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return api.PipelineSpec{}, NotFoundError(fmt.Sprintf("process %s", pid))
+		return api.PipelineSpec{}, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
 	return p.spec, nil
 }
 
-func (s *inMemory) GetNodeStatuses(ctx context.Context, pid string) (map[string]api.Status, error) {
+func (s *inMemory) GetPipelineArgs(ctx context.Context, processID string) (interface{}, error) {
+	return s.pipelines[processID].args, nil
+}
+
+func (s *inMemory) GetTaskStatuses(ctx context.Context, processID string) (map[string]api.Status, error) {
 	res := make(map[string]api.Status)
 
-	nodes := s.pipelines[pid].nodes
-	for _, n := range nodes {
-		res[n.name] = n.status
+	tasks := s.pipelines[processID].tasks
+	for _, t := range tasks {
+		res[t.name] = t.status
 	}
 	return res, nil
 }
 
-func (s *inMemory) GetPipelineArgs(ctx context.Context, pid string) (interface{}, error) {
-	return s.pipelines[pid].args, nil
-}
-
-func (s *inMemory) SetPipelineStatus(ctx context.Context, pid string, status api.Status) error {
-	p := s.pipelines[pid]
+func (s *inMemory) SetPipelineStatus(ctx context.Context, processID string, status api.Status, opt TimeOption) error {
+	p := s.pipelines[processID]
 	p.status = status
-	s.pipelines[pid] = p
-	now := time.Now()
-	if status.Finished() {
-		p.endTime = &now
-	} else if status == api.StatusRunning {
-		p.startTime = &now
-	}
+	s.pipelines[processID] = p
+	p.applyTimeOption(opt)
 	return nil
 }
 
-func (s *inMemory) IsPipelineFinished(ctx context.Context, pid string) (bool, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) IsPipelineFinished(ctx context.Context, processID string) (bool, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return false, NotFoundError(fmt.Sprintf("process %s", pid))
+		return false, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	for _, n := range p.nodes {
-		if !n.status.Finished() {
+	for _, t := range p.tasks {
+		if !t.status.Finished() {
 			return false, nil
 		}
 	}
 	return true, nil
 }
 
-func (s *inMemory) NodeResult(ctx context.Context, pid, nodename string) (interface{}, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetTaskResult(ctx context.Context, processID, taskID string) (interface{}, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return false, NotFoundError(fmt.Sprintf("process %s", pid))
+		return false, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	n, exists := p.nodes[nodename]
+	t, exists := p.tasks[taskID]
 	if !exists {
-		return false, NotFoundError(fmt.Sprintf("node %s", nodename))
+		return false, NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
-	if !n.status.Finished() {
-		return nil, errors.Errorf("node %s not finished", nodename)
+	if !t.status.Finished() {
+		return nil, errors.Errorf("task %s not finished", taskID)
 	}
 
-	switch len(n.jobs) {
+	switch len(t.jobs) {
 	case 0:
-		return nil, errors.Errorf("node %s has no jobs", nodename)
+		return nil, errors.Errorf("task %s has no jobs", taskID)
 	case 1: // Single job
-		for _, j := range n.jobs {
+		for _, j := range t.jobs {
 			return j.result, nil
 		}
 	default:
 		var results []interface{}
-		for _, j := range n.jobs {
-			// Some jobs might be with Failed status in case of a continue on fail node
+		for _, j := range t.jobs {
+			// Some jobs might be with Failed status in case of a continue on fail task
 			if j.status == api.StatusCompleted {
 				results = append(results, j.result)
 			}
@@ -158,34 +192,62 @@ func (s *inMemory) NodeResult(ctx context.Context, pid, nodename string) (interf
 	return nil, nil
 }
 
-func (s *inMemory) GetNodeSpec(ctx context.Context, pid, nodename string) (api.NodeSpec, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetTasksWithStatus(ctx context.Context, processID string, statuses []api.Status) ([]string, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return api.NodeSpec{}, NotFoundError(fmt.Sprintf("process %s", pid))
+		return nil, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	for _, n := range p.spec.Nodes {
-		if n.Name == nodename {
-			return n, nil
+	var tasks []string
+	for id, t := range p.tasks {
+		for _, s := range statuses {
+			if s == t.status {
+				tasks = append(tasks, id)
+				break
+			}
 		}
 	}
-	return api.NodeSpec{}, NotFoundError(fmt.Sprintf("node %s", nodename))
+	return tasks, nil
 }
 
-func (s *inMemory) CreateJobs(ctx context.Context, pid string, nodename string, params []interface{}) error {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetTaskStatus(ctx context.Context, processID, taskID string) (api.Status, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("process %s", pid))
+		return "", NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	n, exists := p.nodes[nodename]
+	t, exists := p.tasks[taskID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("node %s", nodename))
+		return "", NotFoundError(fmt.Sprintf("task %s", taskID))
+	}
+	return t.status, nil
+}
+
+func (s *inMemory) GetTaskSpec(ctx context.Context, processID, taskID string) (api.TaskSpec, error) {
+	p, exists := s.pipelines[processID]
+	if !exists {
+		return api.TaskSpec{}, NotFoundError(fmt.Sprintf("process %s", processID))
+	}
+	for _, t := range p.spec.Tasks {
+		if t.Name == taskID {
+			return t, nil
+		}
+	}
+	return api.TaskSpec{}, NotFoundError(fmt.Sprintf("task %s", taskID))
+}
+
+func (s *inMemory) CreateJobs(ctx context.Context, processID string, taskID string, params map[string]interface{}) error {
+	p, exists := s.pipelines[processID]
+	if !exists {
+		return NotFoundError(fmt.Sprintf("process %s", processID))
+	}
+	t, exists := p.tasks[taskID]
+	if !exists {
+		return NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
 
-	for i, p := range params {
-		jobID := strconv.Itoa(i)
-		n.jobs[jobID] = &job{
-			processID: pid,
-			nodename:  nodename,
+	for jobID, p := range params {
+		t.jobs[jobID] = &job{
+			processID: processID,
+			taskID:    taskID,
 			jobID:     jobID,
 			params:    p,
 			status:    api.StatusCreated,
@@ -194,34 +256,34 @@ func (s *inMemory) CreateJobs(ctx context.Context, pid string, nodename string, 
 	return nil
 }
 
-func (s *inMemory) GetJobsStatuses(ctx context.Context, pid, nodename string) (map[string]api.Status, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetJobsStatuses(ctx context.Context, processID, taskID string) (map[string]api.Status, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return nil, NotFoundError(fmt.Sprintf("process %s", pid))
+		return nil, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return nil, NotFoundError(fmt.Sprintf("node %s", nodename))
+		return nil, NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
 
 	res := make(map[string]api.Status)
-	for _, j := range node.jobs {
+	for _, j := range task.jobs {
 		res[j.jobID] = j.status
 	}
 	return res, nil
 }
 
-func (s *inMemory) StopJobs(ctx context.Context, pid, nodename string, status api.Status) error {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) StopJobs(ctx context.Context, processID, taskID string, status api.Status) error {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("process %s", pid))
+		return NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("node %s", nodename))
+		return NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
 
-	for _, j := range node.jobs {
+	for _, j := range task.jobs {
 		if !j.status.Finished() {
 			j.status = status
 		}
@@ -229,63 +291,93 @@ func (s *inMemory) StopJobs(ctx context.Context, pid, nodename string, status ap
 	return nil
 }
 
-func (s *inMemory) SetNodeStatus(ctx context.Context, pid, nodename string, status api.Status) error {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) SetTaskStatus(ctx context.Context, processID, taskID string, status api.Status, opt TimeOption) error {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("process %s", pid))
+		return NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("node %s", nodename))
+		return NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
-	node.status = status
-	now := time.Now()
-	if status == api.StatusSubmitted {
-		node.startTime = &now
-	} else if status.Finished() {
-		node.endTime = &now
-	}
+	task.status = status
+	task.applyTimeOption(opt)
 	return nil
 }
 
-func (s *inMemory) GetJobStatus(ctx context.Context, pid, nodename, jobID string) (api.Status, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetJobStatus(ctx context.Context, processID, taskID, jobID string) (api.Status, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return "", NotFoundError(fmt.Sprintf("process %s", pid))
+		return "", NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return "", NotFoundError(fmt.Sprintf("node %s", nodename))
+		return "", NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
-	job, exist := node.jobs[jobID]
+	job, exist := task.jobs[jobID]
 	if !exist {
-		return "", NotFoundError(fmt.Sprintf("job %s in node %s in process %s", jobID, nodename, pid))
+		return "", NotFoundError(fmt.Sprintf("job %s in task %s in process %s", jobID, taskID, processID))
 	}
 	return job.status, nil
 }
 
-func (s *inMemory) SetJobStatus(ctx context.Context, pid, nodename, jobID string, status api.Status, t time.Time, payload interface{}) error {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) SetJobStatus(ctx context.Context, processID, taskID, jobID string, status api.Status, opt TimeOption, payload interface{}) error {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("process %s", pid))
+		return NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return NotFoundError(fmt.Sprintf("node %s", nodename))
+		return NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
-	job, exist := node.jobs[jobID]
+	job, exist := task.jobs[jobID]
 	if !exist {
-		return NotFoundError(fmt.Sprintf("job %s in node %s in process %s", jobID, nodename, pid))
+		return NotFoundError(fmt.Sprintf("job %s in task %s in process %s", jobID, taskID, processID))
 	}
 	job.status = status
 	job.result = payload
-
-	if status.Finished() {
-		job.endTime = &t
-	} else if status == api.StatusRunning {
-		job.startTime = &t
-	}
+	job.applyTimeOption(opt)
 	return nil
+}
+
+func (s *inMemory) CountJobWithStatus(ctx context.Context, processID, taskID string, statuses []api.Status) (int, error) {
+	p, exists := s.pipelines[processID]
+	if !exists {
+		return 0, NotFoundError(fmt.Sprintf("process %s", processID))
+	}
+	task, exists := p.tasks[taskID]
+	if !exists {
+		return 0, NotFoundError(fmt.Sprintf("task %s", taskID))
+	}
+	count := 0
+	for _, j := range task.jobs {
+		for _, s := range statuses {
+			if j.status == s {
+				count++
+				break
+			}
+		}
+	}
+	return count, nil
+}
+
+// GetOneJob returns a jobID corresponding to the given status with its parameters.
+func (s *inMemory) GetOneJob(ctx context.Context, processID, taskID string, status api.Status) (string, interface{}, error) {
+	p, exists := s.pipelines[processID]
+	if !exists {
+		return "", nil, NotFoundError(fmt.Sprintf("process %s", processID))
+	}
+	task, exists := p.tasks[taskID]
+	if !exists {
+		return "", nil, NotFoundError(fmt.Sprintf("task %s", taskID))
+	}
+	for _, j := range task.jobs {
+		if j.status == status {
+			return j.jobID, j.params, nil
+		}
+	}
+	//No job found
+	return "", nil, nil
 }
 
 func (s *inMemory) ListPipelines(ctx context.Context) (map[string]string, error) {
@@ -296,14 +388,14 @@ func (s *inMemory) ListPipelines(ctx context.Context) (map[string]string, error)
 	return res, nil
 }
 
-func (s *inMemory) PipelineState(ctx context.Context, pid string) (api.PipelineState, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetPipelineState(ctx context.Context, processID string) (api.PipelineState, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return api.PipelineState{}, NotFoundError(fmt.Sprintf("process %s", pid))
+		return api.PipelineState{}, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	var nodes []api.NodeState
-	for _, v := range p.nodes {
-		nodes = append(nodes, api.NodeState{
+	var tasks []api.TaskState
+	for _, v := range p.tasks {
+		tasks = append(tasks, api.TaskState{
 			Name:      v.name,
 			Status:    v.status,
 			StartTime: v.startTime,
@@ -313,24 +405,24 @@ func (s *inMemory) PipelineState(ctx context.Context, pid string) (api.PipelineS
 	return api.PipelineState{
 		Name:       p.spec.Name,
 		Status:     p.status,
-		Nodes:      nodes,
+		Tasks:      tasks,
 		CreateTime: p.createTime,
 		StartTime:  p.startTime,
 		EndTime:    p.endTime,
 	}, nil
 }
 
-func (s *inMemory) NodeState(ctx context.Context, pid, nodename string) (api.NodeState, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetTaskState(ctx context.Context, processID, taskID string) (api.TaskState, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return api.NodeState{}, NotFoundError(fmt.Sprintf("process %s", pid))
+		return api.TaskState{}, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return api.NodeState{}, NotFoundError(fmt.Sprintf("node %s", nodename))
+		return api.TaskState{}, NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
 	var jobs []api.JobState
-	for _, v := range node.jobs {
+	for _, v := range task.jobs {
 		jobs = append(jobs, api.JobState{
 			ID:        v.jobID,
 			Status:    v.status,
@@ -338,26 +430,26 @@ func (s *inMemory) NodeState(ctx context.Context, pid, nodename string) (api.Nod
 			EndTime:   v.endTime,
 		})
 	}
-	return api.NodeState{
-		Name:      node.name,
-		Status:    node.status,
+	return api.TaskState{
+		Name:      task.name,
+		Status:    task.status,
 		Jobs:      jobs,
-		StartTime: node.startTime,
-		EndTime:   node.endTime,
+		StartTime: task.startTime,
+		EndTime:   task.endTime,
 	}, nil
 }
 
-func (s *inMemory) JobState(ctx context.Context, pid, nodename, jobID string) (api.JobState, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetJobState(ctx context.Context, processID, taskID, jobID string) (api.JobState, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return api.JobState{}, NotFoundError(fmt.Sprintf("process %s", pid))
+		return api.JobState{}, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return api.JobState{}, NotFoundError(fmt.Sprintf("node %s", nodename))
+		return api.JobState{}, NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
 
-	job, exists := node.jobs[jobID]
+	job, exists := task.jobs[jobID]
 	if !exists {
 		return api.JobState{}, NotFoundError(fmt.Sprintf("job %s", jobID))
 	}
@@ -369,34 +461,19 @@ func (s *inMemory) JobState(ctx context.Context, pid, nodename, jobID string) (a
 	}, nil
 }
 
-func (s *inMemory) JobResult(ctx context.Context, pid, nodename, jobid string) (interface{}, error) {
-	p, exists := s.pipelines[pid]
+func (s *inMemory) GetJobResult(ctx context.Context, processID, taskID, jobid string) (interface{}, error) {
+	p, exists := s.pipelines[processID]
 	if !exists {
-		return api.JobState{}, NotFoundError(fmt.Sprintf("process %s", pid))
+		return api.JobState{}, NotFoundError(fmt.Sprintf("process %s", processID))
 	}
-	node, exists := p.nodes[nodename]
+	task, exists := p.tasks[taskID]
 	if !exists {
-		return api.JobState{}, NotFoundError(fmt.Sprintf("node %s", nodename))
+		return api.JobState{}, NotFoundError(fmt.Sprintf("task %s", taskID))
 	}
 
-	job, exists := node.jobs[jobid]
+	job, exists := task.jobs[jobid]
 	if !exists {
 		return api.JobState{}, NotFoundError(fmt.Sprintf("job %s", jobid))
 	}
 	return job.result, nil
-}
-
-func (s *inMemory) SetNodeRunning(ctx context.Context, pid, nodename string) error {
-	p, exists := s.pipelines[pid]
-	if !exists {
-		return NotFoundError(fmt.Sprintf("process %s", pid))
-	}
-	node, exists := p.nodes[nodename]
-	if !exists {
-		return NotFoundError(fmt.Sprintf("node %s", nodename))
-	}
-	if !node.status.Finished() {
-		node.status = api.StatusRunning
-	}
-	return nil
 }

@@ -12,6 +12,7 @@ type Context interface {
 	Logger() *logrus.Entry
 	ProcessID() string
 	CorrelationID() string
+	TaskID() string
 	JobID() string
 	NodeName() string
 	ExecutionID() string
@@ -39,7 +40,7 @@ func WithProcessID(c Context, pid string) Context {
 		pid,
 		c.CorrelationID(),
 		c.JobID(),
-		c.NodeName(),
+		c.TaskID(),
 		c.ExecutionID(),
 	}
 }
@@ -51,7 +52,7 @@ func WithCorrelationID(c Context, correlationID string) Context {
 		c.ProcessID(),
 		correlationID,
 		c.JobID(),
-		c.NodeName(),
+		c.TaskID(),
 		c.ExecutionID(),
 	}
 }
@@ -63,7 +64,7 @@ func WithJobID(c Context, jobID string) Context {
 		c.ProcessID(),
 		c.CorrelationID(),
 		jobID,
-		c.NodeName(),
+		c.TaskID(),
 		c.ExecutionID(),
 	}
 }
@@ -80,6 +81,18 @@ func WithNodeName(c Context, nodename string) Context {
 	}
 }
 
+// WithTaskID returns a copy of the context with a taskID.
+func WithTaskID(c Context, taskID string) Context {
+	return ctx{
+		c,
+		c.ProcessID(),
+		c.CorrelationID(),
+		c.JobID(),
+		taskID,
+		c.ExecutionID(),
+	}
+}
+
 // WithExecutionID returns a copy of the context with a executionID.
 func WithExecutionID(c Context, executionID string) Context {
 	return ctx{
@@ -87,7 +100,7 @@ func WithExecutionID(c Context, executionID string) Context {
 		c.ProcessID(),
 		c.CorrelationID(),
 		c.JobID(),
-		c.NodeName(),
+		c.TaskID(),
 		executionID,
 	}
 }
@@ -97,7 +110,7 @@ type ctx struct {
 	processID     string
 	correlationID string
 	jobID         string
-	nodename      string
+	taskID        string
 	executionID   string
 }
 
@@ -112,8 +125,17 @@ func (c ctx) Logger() *logrus.Entry {
 		},
 	})
 	e := logrus.NewEntry(l)
+	if c.CorrelationID() != "" {
+		e = e.WithField("correlation_id", c.CorrelationID())
+	}
 	if c.ProcessID() != "" {
 		e = e.WithField("process_id", c.ProcessID())
+	}
+	if c.TaskID() != "" {
+		e = e.WithField("task_id", c.TaskID())
+	}
+	if c.JobID() != "" {
+		e = e.WithField("job_id", c.JobID())
 	}
 	return e
 }
@@ -131,7 +153,11 @@ func (c ctx) JobID() string {
 }
 
 func (c ctx) NodeName() string {
-	return c.nodename
+	return c.taskID
+}
+
+func (c ctx) TaskID() string {
+	return c.taskID
 }
 
 func (c ctx) ExecutionID() string {
