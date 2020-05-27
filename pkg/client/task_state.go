@@ -17,7 +17,7 @@ type TaskStateResponse api.TaskState
 const (
 	// TaskStateMethod is http method used for endpoint TaskState
 	TaskStateMethod     = http.MethodGet
-	taskStatePathFormat = "/pipelines/%s/tasks/%s/state"
+	taskStatePathFormat = "/api/pipelines/%s/tasks/%s/state"
 )
 
 var (

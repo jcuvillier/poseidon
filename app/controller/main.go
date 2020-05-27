@@ -57,7 +57,7 @@ func main() {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 	e.Add(client.SubmitMethod, client.SubmitPath, h.Submit)
-	e.GET("/pipelines", h.ListPipelines)
+	e.GET("/app/pipelines", h.ListPipelines)
 	e.Add(client.PipelineStateMethod, client.PipelineStatePath, h.PipelineState)
 	e.Add(client.TaskStateMethod, client.TaskStatePath, h.TaskState)
 

@@ -14,7 +14,7 @@ const (
 	// SubmitMethod is http method used for endpoint Submit
 	SubmitMethod = http.MethodPost
 	// SubmitPath is the path definition of the endpoint Submit.
-	SubmitPath = "/pipelines"
+	SubmitPath = "/api/pipelines"
 )
 
 // SubmitRequest is the request structure for the Submit endpoint

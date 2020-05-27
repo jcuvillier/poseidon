@@ -17,7 +17,7 @@ type PipelineStateResponse api.PipelineState
 const (
 	// PipelineStateMethod is http method used for endpoint PipelineState
 	PipelineStateMethod     = http.MethodGet
-	pipelineStatePathFormat = "/pipelines/%s/state"
+	pipelineStatePathFormat = "/api/pipelines/%s/state"
 )
 
 var (
