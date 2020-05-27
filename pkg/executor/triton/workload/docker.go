@@ -43,7 +43,7 @@ func (d docker) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 
 	containerEnv := []string{
 		fmt.Sprintf("%s=%s", worker.EnvProcessID, ctx.ProcessID()),
-		fmt.Sprintf("%s=%s", worker.EnvNodeName, ctx.NodeName()),
+		fmt.Sprintf("%s=%s", worker.EnvTaskID, ctx.TaskID()),
 		fmt.Sprintf("%s=%s", worker.EnvPublishQName, "poseidon.ex.events"),
 	}
 	for k, v := range d.config.Env {
@@ -57,7 +57,7 @@ func (d docker) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 			Tty:   true,
 			Labels: map[string]string{
 				api.HeaderProcessID: ctx.ProcessID(),
-				api.HeaderNodename:  ctx.NodeName(),
+				api.HeaderTaskID:    ctx.TaskID(),
 			},
 			Env: containerEnv,
 		}, &container.HostConfig{
@@ -74,16 +74,16 @@ func (d docker) Schedule(ctx context.Context, spec WorkloadSpec, n int) error {
 	return nil
 }
 
-func (d docker) Delete(ctx context.Context, nodename string) error {
+func (d docker) Delete(ctx context.Context, taskID string) error {
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("label", fmt.Sprintf("%s=%s", api.HeaderProcessID, ctx.ProcessID()))
-	filterArgs.Add("label", fmt.Sprintf("%s=%s", api.HeaderNodename, nodename))
+	filterArgs.Add("label", fmt.Sprintf("%s=%s", api.HeaderTaskID, taskID))
 	containers, err := d.cli.ContainerList(ctx, types.ContainerListOptions{
 		All:     true,
 		Filters: filterArgs,
 	})
 	if err != nil {
-		return errors.Wrapf(err, "cannot list containers for node %s", nodename)
+		return errors.Wrapf(err, "cannot list containers for task %s", taskID)
 	}
 	for _, c := range containers {
 		ctx.Logger().Tracef("removing container %s (%s)", c.ID, c.Names[0])
@@ -97,6 +97,6 @@ func (d docker) Delete(ctx context.Context, nodename string) error {
 	return nil
 }
 
-func dockernamePrefix(pid, nodename string) string {
-	return fmt.Sprintf("%s-%s", pid[:7], nodename)
+func dockernamePrefix(processID, taskID string) string {
+	return fmt.Sprintf("%s-%s", processID[:7], taskID)
 }

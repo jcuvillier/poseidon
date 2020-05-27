@@ -6,7 +6,6 @@ import (
 	"os"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/client"
-	"poseidon/pkg/executor"
 	"poseidon/pkg/executor/triton"
 	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/scheduler"
@@ -38,15 +37,20 @@ func main() {
 	}
 
 	//Instantiate pipeline engine
-	sc, err := NewScheduler(ctx, store)
+	tsc, err := NewTaskScheduler(ctx, store)
 	if err != nil {
-		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate scheduler"))
+		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate task scheduler"))
+		os.Exit(1)
+	}
+	psc, err := scheduler.NewPipelineScheduler(tsc, store)
+	if err != nil {
+		e.Logger.Fatal(errors.Wrap(err, "failed to instantiate pipeline scheduler"))
 		os.Exit(1)
 	}
 
 	//Setup routes
 	h := handlers{
-		sc:    sc,
+		sc:    psc,
 		store: store,
 	}
 	e.GET("/", func(c echo.Context) error {
@@ -55,10 +59,7 @@ func main() {
 	e.Add(client.SubmitMethod, client.SubmitPath, h.Submit)
 	e.GET("/pipelines", h.ListPipelines)
 	e.Add(client.PipelineStateMethod, client.PipelineStatePath, h.PipelineState)
-	e.Add(client.NodeStateMethod, client.NodeStatePath, h.NodeState)
-	e.GET(fmt.Sprintf("/pipelines/:%s/nodes/:%s/state", processIDParam, nodenameParam), h.NodeState)
-	e.GET(fmt.Sprintf("/pipelines/:%s/nodes/:%s/result", processIDParam, nodenameParam), h.NodeResult)
-	e.GET(fmt.Sprintf("/pipelines/:%s/nodes/:%s/jobs/:%s/result", processIDParam, nodenameParam, jobIDParam), h.JobResult)
+	e.Add(client.TaskStateMethod, client.TaskStatePath, h.TaskState)
 
 	e.HideBanner = true
 	e.HidePort = true
@@ -68,8 +69,8 @@ func main() {
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%s", port)))
 }
 
-// NewScheduler instantiate a new pipeline scheduler
-func NewScheduler(ctx context.Context, s store.Store) (scheduler.Scheduler, error) {
+// NewTaskScheduler instantiate a new task scheduler
+func NewTaskScheduler(ctx context.Context, s store.TaskSchedulerStore) (scheduler.TaskScheduler, error) {
 	b, err := broker.NewFromEnv(ctx)
 	if err != nil {
 		return nil, err
@@ -87,22 +88,21 @@ func NewScheduler(ctx context.Context, s store.Store) (scheduler.Scheduler, erro
 		return nil, err
 	}
 
-	exec, err := triton.New(ctx, b, "poseidon.ex.process", "poseidon.q.events", s, w)
+	exec, err := triton.New(ctx, b, "poseidon.ex.process", "poseidon.q.events", w)
 	if err != nil {
 		return nil, err
 	}
 
-	sc, err := scheduler.NewScheduler(map[string]executor.Executor{
-		"triton": exec,
-	}, s)
+	tsc, err := scheduler.NewTaskScheduler(ctx, s)
 	if err != nil {
 		log.Fatal(err)
 	}
+	tsc.RegisterExecutor("triton", exec)
 
-	return sc, nil
+	return tsc, nil
 }
 
 type handlers struct {
-	sc    scheduler.Scheduler
+	sc    scheduler.PipelineScheduler
 	store store.Store
 }

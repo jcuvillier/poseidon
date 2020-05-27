@@ -19,16 +19,15 @@ const (
 type Event struct {
 	Type          EventType
 	ProcessID     string
-	NodeName      string
+	TaskID        string
 	JobID         string
 	CorrelationID string
-	ExecutionID   string
 	Data          interface{}
 	Time          time.Time
 }
 
 func (e Event) String() string {
-	return fmt.Sprintf("%s for node %s and job %s", e.Type, e.NodeName, e.JobID)
+	return fmt.Sprintf("%s for task %s and job %s", e.Type, e.TaskID, e.JobID)
 }
 
 // ErrorEventData is the expected data type for event with type TypeError

@@ -8,16 +8,17 @@ const (
 // PipelineSpec is the specification of a Pipeline.
 type PipelineSpec struct {
 	Name  string     `json:"name"` // Pipeline name.
-	Nodes []NodeSpec `json:"nodes"`
+	Tasks []TaskSpec `json:"tasks"`
 }
 
-// NodeSpec is the specification of a Node.
-type NodeSpec struct {
+// TaskSpec is the specification of a Task.
+type TaskSpec struct {
 	// Kind is the executor to be used to execute the node
 	Kind           string      `json:"kind"`
 	Name           string      `json:"name"`
 	Dependencies   []string    `json:"dependencies"`
 	Input          interface{} `json:"input"`
 	ContinueOnFail bool        `json:"cof"`
+	Parallelism    int         `json:"parallelism"`
 	ExecutorSpec   interface{} `json:"spec"`
 }

@@ -23,11 +23,11 @@ var (
 
 func init() {
 	jobStatusIconMap = map[api.Status]string{
-		api.StatusCreated:    "◷",
+		api.StatusCreated:    "◌",
 		api.StatusSubmitted:  "◷",
-		api.StatusRunning:    "●",
-		api.StatusCancelled:  "ǁ",
-		api.StatusTerminated: "ǁ",
+		api.StatusRunning:    "◕",
+		api.StatusCancelled:  "⍜",
+		api.StatusTerminated: "⍉",
 		api.StatusCompleted:  "✔",
 		api.StatusFailed:     "✖",
 		api.StatusSkipped:    "○",
@@ -54,38 +54,38 @@ func PrintPipeline(w io.Writer, pipeline api.PipelineState, pid string, opts Pri
 	fmt.Fprintln(w)
 
 	tw.Init(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NODE\tDURATION\tPROGRESSION")
+	fmt.Fprintln(tw, "TASK\tDURATION\tPROGRESSION")
 	fmt.Fprintf(tw, "%s %s\t\t\n", jobStatusIconMap[pipeline.Status], pipeline.Name)
 
-	// Filter nodes with status CREATED
-	var nodes []api.NodeState
-	for _, node := range pipeline.Nodes {
-		if node.Status != api.StatusCreated {
-			nodes = append(nodes, node)
+	// Filter tasks with status CREATED
+	var tasks []api.TaskState
+	for _, task := range pipeline.Tasks {
+		if task.Status != api.StatusCreated {
+			tasks = append(tasks, task)
 		}
 	}
-	sort.Slice(nodes, func(i, j int) bool {
-		if nodes[i].StartTime == nil {
+	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].StartTime == nil {
 			return false
-		} else if nodes[j].StartTime == nil {
+		} else if tasks[j].StartTime == nil {
 			return true
 		}
-		return nodes[i].StartTime.Before(*nodes[j].StartTime)
+		return tasks[i].StartTime.Before(*tasks[j].StartTime)
 	})
 
-	for i := 0; i < len(nodes); i++ {
-		node := nodes[i]
+	for i := 0; i < len(tasks); i++ {
+		task := tasks[i]
 		prefix := "├"
-		if i == len(nodes)-1 {
+		if i == len(tasks)-1 {
 			prefix = "└"
 		}
-		printNode(tw, node, prefix, opts)
+		printNode(tw, task, prefix, opts)
 	}
 	tw.Flush()
 }
 
-func printNode(w io.Writer, node api.NodeState, prefix string, opts PrintOptions) {
-	fmt.Fprintf(w, "%s %s %s\t%s\t%s\n", prefix, jobStatusIconMap[node.Status], node.Name, duration(node.StartTime, node.EndTime), jobProgression(node.Jobs))
+func printNode(w io.Writer, task api.TaskState, prefix string, opts PrintOptions) {
+	fmt.Fprintf(w, "%s %s %s\t%s\t%s\n", prefix, jobStatusIconMap[task.Status], task.Name, duration(task.StartTime, task.EndTime), jobProgression(task.Jobs))
 }
 
 // jobProgression returns a string to be printed for job progression

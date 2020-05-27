@@ -1,6 +1,6 @@
 {
     "name": "foo",
-    "nodes": [
+    "tasks": [
         {
             "kind": "triton",
             "name": "A",
@@ -46,6 +46,54 @@
     "args": {
         "delay": "5s",
         "payload": [
+            {
+                "delay": "10s",
+                "payload": "YOUHOU1"
+            },
+            {
+                "delay": "5s",
+                "payload": "YOUHOU2"
+            },
+            {
+                "delay": "8s",
+                "payload": "YOUHOU3"
+            },
+            {
+                "delay": "10s",
+                "payload": "YOUHOU1"
+            },
+            {
+                "delay": "5s",
+                "payload": "YOUHOU2"
+            },
+            {
+                "delay": "8s",
+                "payload": "YOUHOU3"
+            },
+            {
+                "delay": "10s",
+                "payload": "YOUHOU1"
+            },
+            {
+                "delay": "5s",
+                "payload": "YOUHOU2"
+            },
+            {
+                "delay": "8s",
+                "payload": "YOUHOU3"
+            },
+            {
+                "delay": "10s",
+                "payload": "YOUHOU1"
+            },
+            {
+                "delay": "5s",
+                "payload": "YOUHOU2"
+            },
+            {
+                "delay": "8s",
+                "payload": "YOUHOU3"
+            },
             {
                 "delay": "10s",
                 "payload": "YOUHOU1"

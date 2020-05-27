@@ -14,14 +14,14 @@ type PipelineInfo struct {
 type PipelineState struct {
 	Name       string      `json:"name"`
 	Status     Status      `json:"status"`
-	Nodes      []NodeState `json:"nodes,omitempty"`
+	Tasks      []TaskState `json:"tasks,omitempty"`
 	CreateTime *time.Time  `json:"createTime,omitempty"`
 	StartTime  *time.Time  `json:"startTime,omitempty"`
 	EndTime    *time.Time  `json:"endTime,omitempty"`
 }
 
-// NodeState represents node state.
-type NodeState struct {
+// TaskState represents task state.
+type TaskState struct {
 	Name      string     `json:"name"`
 	Status    Status     `json:"status"`
 	Jobs      []JobState `json:"jobs,omitempty"`

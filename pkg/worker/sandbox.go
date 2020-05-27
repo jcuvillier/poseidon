@@ -96,21 +96,21 @@ func contextFromHeaders(ctx context.Context, headers http.Header) context.Contex
 	}
 	c := context.WithProcessID(ctx, pid)
 
-	// Nodename
-	nodename := headers.Get(api.HeaderNodename)
-	if nodename == "" {
-		nodename = "A"
+	// TaskID
+	taskID := headers.Get(api.HeaderTaskID)
+	if taskID == "" {
+		taskID = "A"
 	}
-	c = context.WithNodeName(c, nodename)
+	c = context.WithTaskID(c, taskID)
 
 	// JobID
 	jobID := headers.Get(api.HeaderJobID)
 	if jobID == "" {
 		jobID = "0"
 	}
-	c = context.WithJobID(c, nodename)
+	c = context.WithJobID(c, jobID)
 
-	// JobID
+	// ExecutionID
 	execID := headers.Get(api.HeaderExecutionID)
 	if execID == "" {
 		execID = uuid.New().String()
