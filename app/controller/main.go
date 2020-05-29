@@ -6,6 +6,7 @@ import (
 	"os"
 	"poseidon/pkg/broker"
 	"poseidon/pkg/client"
+	"poseidon/pkg/executor/dummy"
 	"poseidon/pkg/executor/triton"
 	"poseidon/pkg/executor/triton/workload"
 	"poseidon/pkg/scheduler"
@@ -57,7 +58,7 @@ func main() {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 	e.Add(client.SubmitMethod, client.SubmitPath, h.Submit)
-	e.GET("/app/pipelines", h.ListPipelines)
+	e.GET("/api/pipelines", h.ListPipelines)
 	e.Add(client.PipelineStateMethod, client.PipelineStatePath, h.PipelineState)
 	e.Add(client.TaskStateMethod, client.TaskStatePath, h.TaskState)
 
@@ -88,7 +89,11 @@ func NewTaskScheduler(ctx context.Context, s store.TaskSchedulerStore) (schedule
 		return nil, err
 	}
 
-	exec, err := triton.New(ctx, b, "poseidon.ex.process", "poseidon.q.events", w)
+	tritonExec, err := triton.New(ctx, b, "poseidon.ex.process", "poseidon.q.events", w)
+	if err != nil {
+		return nil, err
+	}
+	dummyExec, err := dummy.New(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +102,8 @@ func NewTaskScheduler(ctx context.Context, s store.TaskSchedulerStore) (schedule
 	if err != nil {
 		log.Fatal(err)
 	}
-	tsc.RegisterExecutor("triton", exec)
+	tsc.RegisterExecutor("triton", tritonExec)
+	tsc.RegisterExecutor("dummy", dummyExec)
 
 	return tsc, nil
 }
