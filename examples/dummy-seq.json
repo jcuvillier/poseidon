@@ -2,23 +2,31 @@
     "name": "foo",
     "tasks": [
         {
-            "kind": "triton",
+            "kind": "dummy",
             "name": "A",
-            "input": "@{args}",
-            "spec": {
-                "image": "poseidon/worker/dummy:latest"
-            }
+            "input": "@{args}"
         },
         {
-            "kind": "triton",
+            "kind": "dummy",
             "name": "B",
             "input": "@{A}",
             "dependencies": [
                 "A"
-            ],
-            "spec": {
-                "image": "poseidon/worker/dummy:latest"
-            }
+            ]
+        },
+        {
+            "kind": "dummy",
+            "name": "C",
+            "input": {
+                "delay": "2s",
+                "payload": {
+                    "delay": "1s",
+                    "payload": "YOUHOU"
+                }
+            },
+            "dependencies": [
+                "B"
+            ]
         }
     ],
     "args": {

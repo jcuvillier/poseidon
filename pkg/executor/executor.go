@@ -22,3 +22,8 @@ type Executor interface {
 	// SetCallbackFunc sets the function to be called when a job is done
 	SetCallbackFunc(f CallbackFunc)
 }
+
+// JobError is the payload returned to TaskScheduler when a job failed
+type JobError struct {
+	Message string `json:"message"`
+}

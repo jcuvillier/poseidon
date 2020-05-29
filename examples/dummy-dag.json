@@ -2,7 +2,7 @@
     "name": "foo",
     "tasks": [
         {
-            "kind": "triton",
+            "kind": "dummy",
             "name": "A",
             "input": "@{args}",
             "spec": {
@@ -10,7 +10,7 @@
             }
         },
         {
-            "kind": "triton",
+            "kind": "dummy",
             "name": "B",
             "input": "#{A}",
             "dependencies": ["A"],
@@ -19,7 +19,7 @@
             }
         },
         {
-            "kind": "triton",
+            "kind": "dummy",
             "name": "C",
             "input": {
                 "delay": "2s",
@@ -31,7 +31,7 @@
             }
         },
         {
-            "kind": "triton",
+            "kind": "dummy",
             "name": "D",
             "input": {
                 "delay": "10s",
